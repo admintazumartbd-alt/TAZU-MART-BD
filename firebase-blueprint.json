@@ -1,0 +1,291 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "image": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "CUSTOMER"] },
+        "loginMethod": { "type": "string", "enum": ["MANUAL", "GOOGLE", "FACEBOOK"] },
+        "totalOrders": { "type": "number" },
+        "totalSpending": { "type": "number" },
+        "cancelledOrders": { "type": "number" },
+        "returnedOrders": { "type": "number" },
+        "pendingOrders": { "type": "number" },
+        "deliveredOrders": { "type": "number" },
+        "fraudScore": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "BLOCKED"] }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "User activity logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "type": { "type": "string", "enum": ["LOGIN", "REGISTRATION", "PROFILE_UPDATE", "ADDRESS_CHANGE", "ORDER_ACTIVITY", "PASSWORD_CHANGE"] },
+        "method": { "type": "string", "enum": ["MANUAL", "GOOGLE", "FACEBOOK"] },
+        "deviceType": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "location": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "userName", "type", "timestamp"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "status": { "type": "string", "enum": ["ACTIVE", "DRAFT", "LOW_STOCK", "OUT_OF_STOCK"] },
+        "image": { "type": "string" },
+        "sku": { "type": "string" },
+        "description": { "type": "string" },
+        "variants": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "category", "price", "stock", "status"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "image": { "type": "string" },
+        "subcategories": { "type": "array", "items": { "type": "object" } },
+        "productCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] }
+      },
+      "required": ["id", "name", "slug", "status"]
+    },
+    "AbandonedCart": {
+      "title": "AbandonedCart",
+      "description": "Abandoned cart information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "total": { "type": "number" },
+        "cartTime": { "type": "string", "format": "date-time" },
+        "reminderSent": { "type": "boolean" },
+        "reminderCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["ABANDONED", "RECOVERED"] }
+      },
+      "required": ["id", "items", "total", "cartTime", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Order and payment information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "customer": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "phone": { "type": "string" },
+            "email": { "type": "string" },
+            "altPhone": { "type": "string" },
+            "address": { "type": "string" },
+            "division": { "type": "string" },
+            "district": { "type": "string" },
+            "upazila": { "type": "string" },
+            "note": { "type": "string" }
+          }
+        },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "subtotal": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "total": { "type": "number" },
+        "profit": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "PACKED", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "RETURNED"] },
+        "paymentMethod": { "type": "string", "enum": ["BKASH", "NAGAD", "COD", "ONLINE"] },
+        "paymentStatus": { "type": "string", "enum": ["PAID", "PENDING", "FAILED"] },
+        "courierName": { "type": "string" },
+        "trackingId": { "type": "string" },
+        "courierStatus": { "type": "string" },
+        "parcelLocation": { "type": "string" },
+        "currentHub": { "type": "string" },
+        "estimatedDelivery": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "deviceIp": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customer", "items", "total", "status", "paymentMethod", "paymentStatus", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Store-wide configuration settings",
+      "type": "object",
+      "properties": {
+        "paymentModes": { "type": "object" },
+        "bkashConfig": { "type": "object" },
+        "nagadConfig": { "type": "object" },
+        "highTrafficMode": { "type": "boolean" },
+        "codLimit": { "type": "number" },
+        "priceSettings": {
+          "type": "object",
+          "properties": {
+            "minPrice": { "type": "number" },
+            "maxPrice": { "type": "number" },
+            "step": { "type": "number" }
+          }
+        }
+      }
+    },
+    "Domain": {
+      "title": "Domain",
+      "description": "Domain configuration information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "domainName": { "type": "string" },
+        "subdomain": { "type": "string" },
+        "dnsType": { "type": "string", "enum": ["A", "CNAME", "NS"] },
+        "nameserver1": { "type": "string" },
+        "nameserver2": { "type": "string" },
+        "aRecordIp": { "type": "string" },
+        "cname": { "type": "string" },
+        "txtRecord": { "type": "string" },
+        "mxRecord": { "type": "string" },
+        "ttl": { "type": "string" },
+        "redirectDomain": { "type": "string" },
+        "forceHttps": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["PENDING", "CONNECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "domainName", "dnsType", "status", "createdAt"]
+    },
+    "Hosting": {
+      "title": "Hosting",
+      "description": "Hosting setup information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "isCustom": { "type": "boolean" },
+        "hostingType": { "type": "string", "enum": ["FREE", "PAID"] },
+        "planName": { "type": "string" },
+        "providerName": { "type": "string" },
+        "serverIp": { "type": "string" },
+        "port": { "type": "string" },
+        "rootDirectory": { "type": "string" },
+        "cpanelUrl": { "type": "string" },
+        "cpanelUser": { "type": "string" },
+        "cpanelPass": { "type": "string" },
+        "ftpHost": { "type": "string" },
+        "ftpUser": { "type": "string" },
+        "ftpPass": { "type": "string" },
+        "dbHost": { "type": "string" },
+        "dbName": { "type": "string" },
+        "dbUser": { "type": "string" },
+        "dbPass": { "type": "string" },
+        "sslStatus": { "type": "boolean" },
+        "storageLimit": { "type": "number" },
+        "bandwidthLimit": { "type": "string", "enum": ["LIMITED", "UNLIMITED"] },
+        "subdomain": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "PENDING"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "hostingType", "planName", "status", "createdAt"]
+    },
+    "Upgrade": {
+      "title": "Upgrade",
+      "description": "Plan upgrade information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "plan": { "type": "string", "enum": ["BASIC", "PRO"] },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "COMPLETED"] },
+        "amount": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "plan", "paymentStatus", "amount", "expiryDate", "createdAt"]
+    },
+    "DomainHostingMap": {
+      "title": "DomainHostingMap",
+      "description": "Mapping between domain and hosting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "domainId": { "type": "string" },
+        "hostingId": { "type": "string" },
+        "linked": { "type": "string", "enum": ["YES", "NO"] }
+      },
+      "required": ["id", "domainId", "hostingId", "linked"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User documents"
+    },
+    "/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Activity log documents"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product documents"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Category documents"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Order documents"
+    },
+    "/settings/store": {
+      "schema": "Settings",
+      "description": "Store-wide settings"
+    },
+    "/domains/{domainId}": {
+      "schema": "Domain",
+      "description": "Domain documents"
+    },
+    "/hosting/{hostingId}": {
+      "schema": "Hosting",
+      "description": "Hosting documents"
+    },
+    "/domain_hosting_map/{mapId}": {
+      "schema": "DomainHostingMap",
+      "description": "Domain hosting mapping documents"
+    },
+    "/abandoned_carts/{cartId}": {
+      "schema": "AbandonedCart",
+      "description": "Abandoned cart documents"
+    }
+  }
+}
