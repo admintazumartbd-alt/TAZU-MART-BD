@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+      const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'];
       
       if (!adminEmails.includes(email.trim().toLowerCase())) {
         setError('Access Denied: Only authorized administrators can log in here.');
@@ -121,16 +121,24 @@ export default function AdminLoginPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-bold text-rose-600 leading-relaxed">{error}</p>
-                  {(error.includes('incorrect') || error.includes('credentials')) && (
+                  <div className="flex flex-wrap gap-3 mt-2">
                     <button 
                       type="button"
                       onClick={handleMagicLink}
                       disabled={isMagicLinkLoading}
                       className="text-[10px] font-black text-rose-700 uppercase tracking-widest hover:underline flex items-center gap-1"
                     >
-                      {isMagicLinkLoading ? 'Sending...' : 'Send Magic Link Instead'}
+                      {isMagicLinkLoading ? 'Sending...' : 'Try Magic Link (No Password)'}
                     </button>
-                  )}
+                    <button 
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={isResetLoading}
+                      className="text-[10px] font-black text-rose-700 uppercase tracking-widest hover:underline flex items-center gap-1"
+                    >
+                      {isResetLoading ? 'Sending...' : 'Reset Password'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

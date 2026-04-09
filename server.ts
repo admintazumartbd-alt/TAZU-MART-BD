@@ -18,7 +18,7 @@ import {
   MOCK_PRODUCTS as GENERATED_MOCK_PRODUCTS,
   MOCK_CUSTOMERS,
   MOCK_ORDERS
-} from "./src/constants.js";
+} from "./src/constants.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -123,86 +123,23 @@ const upload = multer({
 });
 
 async function startServer() {
-  console.log("startServer called");
   const app = express();
   const PORT = 3000;
 
   // Trust proxy is required for rate limiting behind a proxy
   app.set("trust proxy", 1);
 
-  const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) 
-    : ["*"];
-
+  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["*"];
   app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true
   }));
-  app.get("/api/test", (req, res) => res.json({ message: "API is reachable" }));
-
-  // --- CRITICAL ROUTES MOVED TO TOP ---
-  app.get("/api/categories", async (req, res) => {
-    console.log("GET /api/categories request received");
-    try {
-      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
-      const { data, error } = await supabase.from("categories").select("*").order("order", { ascending: true });
-      if (error) throw error;
-      res.json(data);
-    } catch (error) {
-      if (isSupabaseAvailable) {
-        console.warn("Supabase categories fetch failed, switching to mock data fallback.");
-        isSupabaseAvailable = false;
-      }
-      res.json(MOCK_CATEGORIES_STATE);
-    }
-  });
-
-  app.get("/api/menus", async (req, res) => {
-    console.log("GET /api/menus request received");
-    try {
-      if (isSupabaseAvailable) {
-        const { data, error } = await supabase.from("menus").select("*").eq("status", "ACTIVE").order("order", { ascending: true });
-        if (error) throw error;
-        res.json(data);
-      } else {
-        res.json([]);
-      }
-    } catch (error: any) {
-      console.error("Failed to fetch menus:", error.message || error);
-      if (error.code === '42P01') {
-        console.error("HINT: The 'menus' table does not exist in your Supabase database. Please run the SQL setup script.");
-      }
-      // Fallback menus so the UI doesn't look empty
-      const fallbackMenus = [
-        { id: '1', name: 'Home', slug: '/', status: 'ACTIVE', order: 1, icon: 'Zap' },
-        { id: '2', name: 'Shop', slug: '/shop', status: 'ACTIVE', order: 2, icon: 'TrendingUp' },
-        { id: '3', name: 'Offers', slug: '/offers', status: 'ACTIVE', order: 3, icon: 'Percent' }
-      ];
-      res.json(fallbackMenus);
-    }
-  });
-
-  app.get("/api/products/featured", async (req, res) => {
-    console.log("GET /api/products/featured request received");
-    try {
-      if (isSupabaseAvailable) {
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("is_featured", true)
-          .eq("status", "ACTIVE")
-          .limit(10);
-        if (error) throw error;
-        res.json(data);
-      } else {
-        res.json(MOCK_PRODUCTS_STATE.filter(p => p.is_featured).slice(0, 10));
-      }
-    } catch (error) {
-      console.error("Failed to fetch featured products:", error);
-      res.json(MOCK_PRODUCTS_STATE.filter(p => p.is_featured).slice(0, 10));
-    }
-  });
-  // --- END CRITICAL ROUTES ---
 
   app.use(express.json());
   app.use(cookieParser());
@@ -211,7 +148,7 @@ async function startServer() {
   // High Traffic Protection Middleware
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 1000, // Increased limit for development/testing
+    limit: 100, // Limit each IP to 100 requests per windowMs
     standardHeaders: "draft-7",
     legacyHeaders: false,
     handler: async (req, res, next, options) => {
@@ -230,7 +167,7 @@ async function startServer() {
     },
   });
 
-  // app.use("/api/", limiter);
+  app.use("/api/", limiter);
 
   // Admin Authorization Middleware
   const adminMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -247,8 +184,7 @@ async function startServer() {
         return res.status(401).json({ error: 'Unauthorized: Invalid token' });
       }
 
-      const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
-      const isAdmin = adminEmails.includes(user.email?.toLowerCase() || '');
+      const isAdmin = user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
       if (!isAdmin) {
         return res.status(403).json({ error: 'Forbidden: Admin access required' });
       }
@@ -600,15 +536,13 @@ async function startServer() {
         deliveredOrders: orders.filter(o => o.status === 'DELIVERED').length,
         returnedOrders: orders.filter(o => o.status === 'RETURNED').length,
         recentOrders: [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
-        topProducts: orders.length > 0 ? Object.values(orders.reduce((acc: any, o) => {
-          o.items.forEach((item: any) => {
-            if (!acc[item.productId]) {
-              acc[item.productId] = { name: item.name, sales: 0, color: '#FF6A00', image: item.image || item.images?.[0] || '/default-product.png' };
-            }
-            acc[item.productId].sales += item.quantity;
-          });
-          return acc;
-        }, {})).sort((a: any, b: any) => b.sales - a.sales).slice(0, 5) : [],
+        topProducts: [
+          { name: 'Premium Cotton T-Shirt', sales: 400, color: '#FF6A00', image: 'https://picsum.photos/seed/tshirt/100/100' },
+          { name: 'Slim Fit Denim Jeans', sales: 300, color: '#FF8C00', image: 'https://picsum.photos/seed/jeans/100/100' },
+          { name: 'Wireless Bluetooth Earbuds', sales: 200, color: '#FFA500', image: 'https://picsum.photos/seed/earbuds/100/100' },
+          { name: 'Leather Wallet', sales: 150, color: '#FFC107', image: 'https://picsum.photos/seed/wallet/100/100' },
+          { name: 'Designer Sunglasses', sales: 100, color: '#FFEB3B', image: 'https://picsum.photos/seed/sunglasses/100/100' },
+        ],
         salesData: orders.reduce((acc: any, o) => {
           const date = o.createdAt.split('T')[0];
           acc[date] = (acc[date] || 0) + o.total;
@@ -907,6 +841,21 @@ async function startServer() {
   });
 
   // Category Management API
+  app.get("/api/categories", async (req, res) => {
+    try {
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("categories").select("*").order("order", { ascending: true });
+      if (error) throw error;
+      res.json(data);
+    } catch (error) {
+      if (isSupabaseAvailable) {
+        console.warn("Supabase categories fetch failed, switching to mock data fallback.");
+        isSupabaseAvailable = false;
+      }
+      res.json(MOCK_CATEGORIES_STATE);
+    }
+  });
+
   app.post("/api/admin/categories", async (req, res) => {
     try {
       if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
@@ -1321,6 +1270,30 @@ async function startServer() {
     }
   });
 
+  app.get("/api/products/featured", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("is_featured", true)
+          .eq("is_deleted", false)
+          .order("createdAt", { ascending: false })
+          .limit(8);
+        if (!error && data) return res.json(data);
+      }
+      
+      const products = MOCK_PRODUCTS_STATE
+        .filter(p => p.is_featured && !p.is_deleted)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 8);
+      res.json(products);
+    } catch (error) {
+      console.error("Featured products fetch error:", error);
+      res.json([]);
+    }
+  });
+
   app.get("/api/products/home", async (req, res) => {
     try {
       if (isSupabaseAvailable) {
@@ -1503,6 +1476,24 @@ async function startServer() {
   });
 
   // Dynamic Menus API
+  app.get("/api/menus", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("menus").select("*").eq("status", "ACTIVE").order("order", { ascending: true });
+        if (!error && data) return res.json(data);
+      }
+      res.json([
+        { id: '1', name: 'New Arrivals', slug: 'new-arrivals', status: 'ACTIVE', order: 0, icon: 'Zap' },
+        { id: '2', name: 'Best Selling', slug: 'best-selling', status: 'ACTIVE', order: 1, icon: 'TrendingUp' },
+        { id: '3', name: 'Offers', slug: 'offers', status: 'ACTIVE', order: 2, icon: 'Percent' },
+        { id: '4', name: 'About Us', slug: 'about-us', status: 'ACTIVE', order: 3, icon: 'Info' },
+        { id: '5', name: 'Contact Us', slug: 'contact-us', status: 'ACTIVE', order: 4, icon: 'Phone' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch menus" });
+    }
+  });
+
   app.post("/api/admin/menus", async (req, res) => {
     try {
       const menu = req.body;
@@ -2230,12 +2221,6 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
-
-  // Global error handler for Express
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("Unhandled Express Error:", err);
-    res.status(500).json({ error: "Internal Server Error", details: err.message });
-  });
 
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);

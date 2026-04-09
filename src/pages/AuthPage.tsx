@@ -137,7 +137,7 @@ export default function AuthPage() {
             </div>
             <div className="space-y-2">
               <p className="text-xs font-bold text-rose-600 leading-relaxed">{error}</p>
-              {((formData.email.trim().toLowerCase() === 'admin.tazumart060@gmail.com' || formData.email.trim().toLowerCase() === 'admin.tazumartbd@gmail.com') && (error.includes('incorrect') || error.includes('credentials'))) && (
+              {((['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'].includes(formData.email.trim().toLowerCase())) && (error.includes('incorrect') || error.includes('credentials'))) && (
                 <button 
                   type="button"
                   onClick={handleMagicLink}

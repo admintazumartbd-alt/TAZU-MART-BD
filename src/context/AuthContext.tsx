@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     });
 
-    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'];
     const isAdminEmail = adminEmails.includes(email.toLowerCase());
 
     // Improved Admin Login Logic
@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (signUpError) {
             // If user already exists, then the password was definitely wrong
             if (signUpError.message.toLowerCase().includes('already registered')) {
-              throw new Error('The admin account exists but the password entered is incorrect. Please use the correct password or use the Magic Link.');
+              throw new Error('The admin account exists but the password entered is incorrect. Please use the "Magic Link" button below to log in without a password.');
             }
             // If it's a rate limit during signup
             if (signUpError.message.toLowerCase().includes('rate limit')) {
@@ -165,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error = null;
             } else {
               // Signup succeeded but session is null (likely email confirmation required)
-              throw new Error('Admin account created! However, Supabase requires email confirmation by default. Please check your inbox OR disable "Confirm email" in Supabase Dashboard (Authentication > Providers > Email) to log in instantly.');
+              throw new Error('Admin account created! However, Supabase requires email confirmation by default. Please check your email inbox to confirm your account OR use the "Magic Link" button below to log in instantly.');
             }
           }
         } catch (bootstrapErr: any) {
@@ -251,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
     if (!authData.user) throw new Error('Registration failed');
     
-    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'];
     const isAdminEmail = adminEmails.includes(authData.user.email?.toLowerCase() || '');
     const userData: User = {
       id: authData.user.id,
