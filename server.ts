@@ -141,22 +141,11 @@ async function startServer() {
   // High Traffic Protection Middleware
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 100, // Limit each IP to 100 requests per windowMs
+    limit: 1000, // Increased limit for SPA
     standardHeaders: "draft-7",
     legacyHeaders: false,
-    handler: async (req, res, next, options) => {
-      try {
-        const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
-        const highTrafficMode = data?.highTrafficMode || false;
-        if (highTrafficMode) {
-          res.status(429).json({ error: "High traffic detected. Please try again in a few minutes." });
-        } else {
-          res.status(options.statusCode).send(options.message);
-        }
-      } catch (error) {
-        console.error("Rate limit handler error:", error);
-        res.status(options.statusCode).send(options.message);
-      }
+    handler: (req, res, next, options) => {
+      res.status(options.statusCode).send(options.message);
     },
   });
 
@@ -177,7 +166,7 @@ async function startServer() {
         return res.status(401).json({ error: 'Unauthorized: Invalid token' });
       }
 
-      const isAdmin = user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
+      const isAdmin = user.email?.toLowerCase() === 'admin.tazumart060@gmail.com';
       if (!isAdmin) {
         return res.status(403).json({ error: 'Forbidden: Admin access required' });
       }

@@ -9,7 +9,6 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
-  address?: string;
   image?: string;
   role: UserRole;
   loginMethod: LoginMethod;
@@ -24,7 +23,7 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
-  register: (data: { email: string; password?: string; name: string; phone?: string; address?: string }) => Promise<void>;
+  register: (data: { email: string; password?: string; name: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   sendMagicLink: (email: string) => Promise<void>;
@@ -40,12 +39,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn('Auth session fetch error:', error.message);
+        // If refresh token is invalid, clear it
+        if (error.message.includes('Refresh Token Not Found') || error.message.includes('invalid refresh token')) {
+          supabase.auth.signOut();
+        }
+      }
       if (session?.user) {
         fetchUserData(session.user.id);
       } else {
         setLoading(false);
       }
+    }).catch(err => {
+      console.error('Unexpected auth error:', err);
+      setLoading(false);
     });
 
     // Listen for auth changes
@@ -122,8 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     });
 
-    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'];
-    const isAdminEmail = adminEmails.includes(email.toLowerCase());
+    const isAdminEmail = email.toLowerCase() === 'admin.tazumart060@gmail.com';
 
     // Improved Admin Login Logic
     if (error && isAdminEmail) {
@@ -150,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (signUpError) {
             // If user already exists, then the password was definitely wrong
             if (signUpError.message.toLowerCase().includes('already registered')) {
-              throw new Error('The admin account exists but the password entered is incorrect. Please use the "Magic Link" button below to log in without a password.');
+              throw new Error('The admin account exists but the password entered is incorrect. Please use the correct password or use the Magic Link.');
             }
             // If it's a rate limit during signup
             if (signUpError.message.toLowerCase().includes('rate limit')) {
@@ -165,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error = null;
             } else {
               // Signup succeeded but session is null (likely email confirmation required)
-              throw new Error('Admin account created! However, Supabase requires email confirmation by default. Please check your email inbox to confirm your account OR use the "Magic Link" button below to log in instantly.');
+              throw new Error('Admin account created! Please check your email inbox to confirm your account before logging in.');
             }
           }
         } catch (bootstrapErr: any) {
@@ -234,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const register = async (data: { email: string; password?: string; name: string; phone?: string; address?: string }) => {
+  const register = async (data: { email: string; password?: string; name: string; phone?: string }) => {
     if (!data.password) throw new Error('Password is required for registration');
     
     const email = data.email.trim();
@@ -251,14 +259,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
     if (!authData.user) throw new Error('Registration failed');
     
-    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com', 'admin.tazumart@gmail.com'];
-    const isAdminEmail = adminEmails.includes(authData.user.email?.toLowerCase() || '');
+    const isAdminEmail = authData.user.email?.toLowerCase() === 'admin.tazumart060@gmail.com';
     const userData: User = {
       id: authData.user.id,
       name: data.name,
       email: authData.user.email || '',
       phone: data.phone,
-      address: data.address,
       role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
       loginMethod: 'MANUAL',
       createdAt: new Date().toISOString(),

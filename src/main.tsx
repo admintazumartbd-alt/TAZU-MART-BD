@@ -5,7 +5,11 @@ import App from './App.tsx';
 import './index.css';
 
 // Configure axios base URL for production
-axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || '';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+axios.defaults.baseURL = (apiBaseUrl && apiBaseUrl.startsWith('http') && !apiBaseUrl.includes('localhost:3000')) 
+  ? apiBaseUrl 
+  : '';
+axios.defaults.withCredentials = true;
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { SettingsProvider } from './context/SettingsContext';
