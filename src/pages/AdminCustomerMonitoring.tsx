@@ -13,7 +13,8 @@ import { format } from 'date-fns';
 export default function AdminCustomerMonitoring() {
   const { getActivities } = useActivity();
   const { user } = useAuth();
-  const isAdmin = user?.email.toLowerCase() === 'admin.tazumartbd@gmail.com';
+  const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+  const isAdmin = adminEmails.includes(user?.email.toLowerCase() || '');
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [filter, setFilter] = useState('ALL');

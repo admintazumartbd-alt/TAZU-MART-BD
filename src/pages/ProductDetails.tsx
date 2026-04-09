@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '@/src/lib/api';
 import { 
   ShoppingCart, Heart, Share2, ShieldCheck, Truck, RotateCcw, 
   Star, Plus, Minus, MessageCircle, CheckCircle2, AlertTriangle,
-  ChevronLeft, ChevronRight, Info
+  ChevronLeft, ChevronRight, Info, FileText, Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatPrice } from '@/src/lib/utils';
@@ -18,7 +18,6 @@ export default function ProductDetails() {
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState('description');
   const [selectedColor, setSelectedColor] = useState<any>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -36,13 +35,13 @@ export default function ProductDetails() {
     setIsLoading(true);
     try {
       try {
-        const response = await axios.get(`/api/product/${id}`);
+        const response = await api.get(`/api/product/${id}`);
         if (response.data) {
           setProduct(response.data);
           if (response.data.colors?.length > 0) {
             setSelectedColor(response.data.colors[0]);
           }
-          const allResponse = await axios.get('/api/admin/products');
+          const allResponse = await api.get('/api/admin/products');
           const related = allResponse.data.filter((p: any) => p.category === response.data.category && p.id !== id).slice(0, 4);
           setRelatedProducts(related.length > 0 ? related : MOCK_PRODUCTS.filter(p => p.category === response.data.category && p.id !== id).slice(0, 4));
           return;
@@ -51,13 +50,13 @@ export default function ProductDetails() {
         console.warn("API fetch failed, falling back to mock data:", apiError);
         // Try plural as fallback
         try {
-          const response = await axios.get(`/api/products/${id}`);
+          const response = await api.get(`/api/products/${id}`);
           if (response.data) {
             setProduct(response.data);
             if (response.data.colors?.length > 0) {
               setSelectedColor(response.data.colors[0]);
             }
-            const allResponse = await axios.get('/api/admin/products');
+            const allResponse = await api.get('/api/admin/products');
             const related = allResponse.data.filter((p: any) => p.category === response.data.category && p.id !== id).slice(0, 4);
             setRelatedProducts(related.length > 0 ? related : MOCK_PRODUCTS.filter(p => p.category === response.data.category && p.id !== id).slice(0, 4));
             return;
@@ -93,7 +92,7 @@ export default function ProductDetails() {
     
     setIsSubmittingReview(true);
     try {
-      await axios.post(`/api/product/${id}/reviews`, reviewForm);
+      await api.post(`/api/product/${id}/reviews`, reviewForm);
       setReviewForm({ userName: '', rating: 5, comment: '', images: [] });
       fetchProduct(); // Refresh product data to show new review
     } catch (error) {
@@ -112,7 +111,7 @@ export default function ProductDetails() {
       });
 
       try {
-        const response = await axios.post('/api/admin/upload', formData, {
+        const response = await api.post('/api/admin/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         if (response.data.urls) {
@@ -165,20 +164,7 @@ export default function ProductDetails() {
   const discount = product.oldPrice ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100) : 0;
 
   return (
-    <div className="bg-[#F8F8F8] min-h-screen pb-32 lg:pb-20">
-      {/* Mobile Sticky Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 p-4 flex gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        <button className="flex-1 py-4 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform">
-          <ShoppingCart size={20} /> Add to Cart
-        </button>
-        <button 
-          onClick={() => navigate(`/checkout?productId=${product.id}&quantity=${quantity}${selectedColor ? `&color=${selectedColor.name}` : ''}`)}
-          className="flex-1 py-4 bg-[#FF6A00] text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-orange-200"
-        >
-          Order Now
-        </button>
-      </div>
-
+    <div className="bg-[#F8F8F8] min-h-screen pb-20">
       <div className="max-w-7xl mx-auto px-4 py-4 lg:py-8">
         {/* Breadcrumbs */}
         <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-400 mb-6 overflow-x-auto whitespace-nowrap pb-2 lg:pb-0">
@@ -387,33 +373,6 @@ export default function ProductDetails() {
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stock: {product.stock}</span>
               </div>
 
-              {/* Desktop Buttons */}
-              <div className="hidden lg:grid grid-cols-2 gap-4 pt-4">
-                <button 
-                  disabled={product.stock === 0}
-                  className={cn(
-                    "py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 text-xs",
-                    product.stock > 0 
-                      ? "bg-gray-900 text-white hover:bg-black shadow-xl shadow-gray-200" 
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  )}
-                >
-                  <ShoppingCart size={18} /> Add to Cart
-                </button>
-                <button 
-                  onClick={() => navigate(`/checkout?productId=${product.id}&quantity=${quantity}${selectedColor ? `&color=${selectedColor.name}` : ''}`)}
-                  disabled={product.stock === 0}
-                  className={cn(
-                    "py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 text-xs",
-                    product.stock > 0 
-                      ? "bg-[#FF6A00] text-white hover:shadow-2xl hover:shadow-orange-200" 
-                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  )}
-                >
-                  Order Now
-                </button>
-              </div>
-
               {/* Conversion Boost Sections */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                 <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
@@ -449,203 +408,215 @@ export default function ProductDetails() {
           </div>
         </div>
 
-        {/* Tabs Section */}
-        <div className="mt-12 bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
-          <div className="flex border-b border-gray-100 overflow-x-auto scrollbar-hide">
-            {['description', 'specifications', 'reviews'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "flex-1 min-w-[120px] py-5 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative",
-                  activeTab === tab ? "text-[#FF6A00]" : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                {tab}
-                {activeTab === tab && (
-                  <motion.div 
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-1 bg-[#FF6A00]" 
-                  />
-                )}
-              </button>
-            ))}
+        {/* Product Actions (Add to Cart | Order Now) */}
+        <div className="mt-8 p-[15px]">
+          <button 
+            disabled={product.stock === 0}
+            className={cn(
+              "w-full bg-[#0f172a] text-white p-[14px] rounded-[10px] mb-[10px] text-[15px] font-bold flex items-center justify-center gap-3 transition-all active:scale-95",
+              product.stock === 0 && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <ShoppingCart size={20} /> Add to Cart
+          </button>
+          <button 
+            onClick={() => navigate(`/checkout?productId=${product.id}&quantity=${quantity}${selectedColor ? `&color=${selectedColor.name}` : ''}`)}
+            disabled={product.stock === 0}
+            className={cn(
+              "w-full bg-[#ff6a00] text-white p-[14px] rounded-[10px] text-[15px] font-bold flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-orange-100",
+              product.stock === 0 && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            Order Now
+          </button>
+        </div>
+
+        {/* Product Details (Vertical Stacked Cards) */}
+        <div className="mt-6 space-y-4 px-[15px]">
+          {/* Description Card */}
+          <div className="bg-white rounded-[12px] p-[15px] shadow-[0_2px_8px_rgba(0,0,0,0.05)] border border-gray-50">
+            <h3 className="text-[16px] mb-3 text-[#222] font-bold flex items-center gap-2">
+              <FileText size={18} className="text-[#FF6A00]" /> Description
+            </h3>
+            <div className="prose max-w-none text-gray-600 leading-relaxed">
+              {product.description ? (
+                <p 
+                  className="text-[14px] text-[#666] leading-[1.5]"
+                  style={{ 
+                    fontSize: product.descriptionSize || 'inherit',
+                    fontWeight: product.descriptionWeight === 'bold' ? 'bold' : 'normal'
+                  }}
+                >
+                  {product.description}
+                </p>
+              ) : (
+                <div className="text-center text-[#aaa] text-[13px] py-4">
+                  No description added yet
+                </div>
+              )}
+            </div>
           </div>
-          <div className="p-6 lg:p-10">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === 'description' && (
-                  <div className="prose max-w-none text-gray-600 leading-relaxed">
-                    <h3 className="text-lg font-black text-gray-900 mb-4 uppercase tracking-tight">Full Product Details</h3>
-                    <p 
-                      style={{ 
-                        fontSize: product.descriptionSize || 'inherit',
-                        fontWeight: product.descriptionWeight === 'bold' ? 'bold' : 'normal'
-                      }}
-                    >
-                      {product.description || "No detailed description available for this product."}
-                    </p>
+
+          {/* Specifications Card */}
+          <div className="bg-white rounded-[12px] p-[15px] shadow-[0_2px_8px_rgba(0,0,0,0.05)] border border-gray-50">
+            <h3 className="text-[16px] mb-3 text-[#222] font-bold flex items-center gap-2">
+              <Settings size={18} className="text-[#FF6A00]" /> Specifications
+            </h3>
+            <div className="space-y-2">
+              {product.specifications ? Object.entries(product.specifications).map(([key, value]: [string, any]) => (
+                <div key={key} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                  <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">{key}</span>
+                  <span className="text-[13px] font-black text-gray-900">{value}</span>
+                </div>
+              )) : (
+                <div className="text-center text-[#aaa] text-[13px] py-4">
+                  No specifications listed
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Reviews Card */}
+          <div className="bg-white rounded-[12px] p-[15px] shadow-[0_2px_8px_rgba(0,0,0,0.05)] border border-gray-50">
+            <h3 className="text-[16px] mb-4 text-[#222] font-bold flex items-center gap-2">
+              <Star size={18} className="text-[#FF6A00]" /> Customer Reviews
+            </h3>
+            
+            <div className="space-y-8">
+              {/* Review Summary */}
+              <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-orange-50/30 rounded-2xl border border-orange-100">
+                <div className="text-center">
+                  <div className="text-4xl font-black text-gray-900">{product.rating || 0}</div>
+                  <div className="flex text-[#F4B400] my-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} size={16} fill={i < Math.floor(product.rating || 0) ? "currentColor" : "none"} className={i < Math.floor(product.rating || 0) ? "" : "text-gray-200"} />
+                    ))}
                   </div>
-                )}
-                {activeTab === 'specifications' && (
-                  <div className="max-w-2xl mx-auto space-y-1">
-                    {product.specifications ? Object.entries(product.specifications).map(([key, value]: [string, any]) => (
-                      <div key={key} className="flex justify-between p-4 bg-gray-50 rounded-xl">
-                        <span className="font-bold text-gray-400 uppercase text-[9px] tracking-widest">{key}</span>
-                        <span className="font-black text-gray-900 text-xs">{value}</span>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{product.reviews || 0} Reviews</div>
+                </div>
+                <div className="flex-1 w-full space-y-1.5">
+                  {[5, 4, 3, 2, 1].map(star => (
+                    <div key={star} className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold text-gray-400 w-3">{star}</span>
+                      <div className="flex-1 h-1.5 bg-white rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-[#F4B400]" 
+                          style={{ width: star === 5 ? '80%' : star === 4 ? '15%' : '5%' }} 
+                        />
                       </div>
-                    )) : (
-                      <div className="text-center py-12 text-gray-400 font-bold uppercase tracking-widest">
-                        No specifications listed
-                      </div>
-                    )}
-                  </div>
-                )}
-                {activeTab === 'reviews' && (
-                  <div className="space-y-12">
-                    {/* Review Summary */}
-                    <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-orange-50/30 rounded-3xl border border-orange-100">
-                      <div className="text-center">
-                        <div className="text-5xl font-black text-gray-900">{product.rating || 0}</div>
-                        <div className="flex text-[#F4B400] my-2">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} size={16} fill={i < Math.floor(product.rating || 0) ? "currentColor" : "none"} />
-                          ))}
-                        </div>
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{product.reviews || 0} Reviews</div>
-                      </div>
-                      <div className="flex-1 w-full space-y-1.5">
-                        {[5, 4, 3, 2, 1].map(star => (
-                          <div key={star} className="flex items-center gap-3">
-                            <span className="text-[10px] font-bold text-gray-400 w-3">{star}</span>
-                            <div className="flex-1 h-1.5 bg-white rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-[#F4B400]" 
-                                style={{ width: star === 5 ? '80%' : star === 4 ? '15%' : '5%' }} 
-                              />
-                            </div>
-                          </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Review Form */}
+              <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 space-y-6">
+                <h4 className="text-[12px] font-black text-gray-900 uppercase tracking-widest">Write a Review</h4>
+                <form onSubmit={handleReviewSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Your Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#FF6A00]"
+                        value={reviewForm.userName}
+                        onChange={e => setReviewForm({ ...reviewForm, userName: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Rating</label>
+                      <div className="flex gap-2 mt-2">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                            className={cn(
+                              "transition-colors",
+                              reviewForm.rating >= star ? "text-[#F4B400]" : "text-gray-200"
+                            )}
+                          >
+                            <Star size={24} fill={reviewForm.rating >= star ? "currentColor" : "none"} />
+                          </button>
                         ))}
                       </div>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Your Comment</label>
+                    <textarea 
+                      rows={3}
+                      required
+                      className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#FF6A00] resize-none"
+                      value={reviewForm.comment}
+                      onChange={e => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Upload Images</label>
+                    <div className="flex flex-wrap gap-2">
+                      {reviewForm.images.map((img, idx) => (
+                        <div key={idx} className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
+                          <img src={img} alt="Review" className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-[#FF6A00] hover:bg-orange-50 transition-all">
+                        <Plus size={20} className="text-gray-400" />
+                        <input type="file" multiple className="hidden" onChange={handleReviewImageUpload} accept="image/*" />
+                      </label>
+                    </div>
+                  </div>
+                  <button 
+                    type="submit"
+                    disabled={isSubmittingReview}
+                    className="w-full py-4 bg-[#FF6A00] text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-orange-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                  </button>
+                </form>
+              </div>
 
-                    {/* Review Form */}
-                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 space-y-6">
-                      <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">Write a Review</h4>
-                      <form onSubmit={handleReviewSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Your Name</label>
-                            <input 
-                              type="text" 
-                              required
-                              className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#FF6A00]"
-                              value={reviewForm.userName}
-                              onChange={e => setReviewForm({ ...reviewForm, userName: e.target.value })}
-                            />
+              {/* Review List */}
+              <div className="space-y-6">
+                {product.productReviews && product.productReviews.length > 0 ? (
+                  product.productReviews.map((review: any) => (
+                    <div key={review.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-400 font-black shadow-sm">
+                            {review.userName.charAt(0).toUpperCase()}
                           </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Rating</label>
-                            <div className="flex gap-2 mt-2">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <button
-                                  key={star}
-                                  type="button"
-                                  onClick={() => setReviewForm({ ...reviewForm, rating: star })}
-                                  className={cn(
-                                    "transition-colors",
-                                    reviewForm.rating >= star ? "text-[#F4B400]" : "text-gray-200"
-                                  )}
-                                >
-                                  <Star size={24} fill={reviewForm.rating >= star ? "currentColor" : "none"} />
-                                </button>
+                          <div>
+                            <p className="text-xs font-black text-gray-900">{review.userName}</p>
+                            <div className="flex text-[#F4B400]">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star key={i} size={10} fill={i < review.rating ? "currentColor" : "none"} />
                               ))}
                             </div>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Your Comment</label>
-                          <textarea 
-                            rows={3}
-                            required
-                            className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#FF6A00] resize-none"
-                            value={reviewForm.comment}
-                            onChange={e => setReviewForm({ ...reviewForm, comment: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Upload Images</label>
-                          <div className="flex flex-wrap gap-2">
-                            {reviewForm.images.map((img, idx) => (
-                              <div key={idx} className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
-                                <img src={img} alt="Review" className="w-full h-full object-cover" />
-                              </div>
-                            ))}
-                            <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-[#FF6A00] hover:bg-orange-50 transition-all">
-                              <Plus size={20} className="text-gray-400" />
-                              <input type="file" multiple className="hidden" onChange={handleReviewImageUpload} accept="image/*" />
-                            </label>
-                          </div>
-                        </div>
-                        <button 
-                          type="submit"
-                          disabled={isSubmittingReview}
-                          className="w-full py-4 bg-[#FF6A00] text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-orange-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          {isSubmittingReview ? "Submitting..." : "Submit Review"}
-                        </button>
-                      </form>
-                    </div>
-
-                    {/* Review List */}
-                    <div className="space-y-6">
-                      {product.productReviews && product.productReviews.length > 0 ? (
-                        product.productReviews.map((review: any) => (
-                          <div key={review.id} className="p-6 bg-white rounded-3xl border border-gray-50 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 font-black">
-                                  {review.userName.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                  <p className="text-xs font-black text-gray-900">{review.userName}</p>
-                                  <div className="flex text-[#F4B400]">
-                                    {Array.from({ length: 5 }).map((_, i) => (
-                                      <Star key={i} size={10} fill={i < review.rating ? "currentColor" : "none"} />
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                {new Date(review.createdAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-600 leading-relaxed">{review.comment}</p>
-                            {review.images && review.images.length > 0 && (
-                              <div className="flex gap-2">
-                                {review.images.map((img: string, idx: number) => (
-                                  <img key={idx} src={img} alt="Review" className="w-16 h-16 rounded-lg object-cover border border-gray-100" />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-12 text-gray-400 font-bold uppercase tracking-widest">
-                          No reviews yet. Be the first to review!
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed">{review.comment}</p>
+                      {review.images && review.images.length > 0 && (
+                        <div className="flex gap-2">
+                          {review.images.map((img: string, idx: number) => (
+                            <img key={idx} src={img} alt="Review" className="w-16 h-16 rounded-lg object-cover border border-gray-100" />
+                          ))}
                         </div>
                       )}
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-gray-400 font-bold uppercase tracking-widest">
+                    No reviews yet. Be the first to review!
                   </div>
                 )}
-              </motion.div>
-            </AnimatePresence>
+              </div>
+            </div>
           </div>
         </div>
 

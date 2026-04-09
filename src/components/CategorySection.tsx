@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Category, Product } from '@/src/types';
 import ProductCard from './ProductCard';
 import { ChevronRight, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import api from '@/src/lib/api';
 
 interface CategorySectionProps {
   category: Category;
@@ -16,7 +16,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ category }) => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await axios.get(`/api/products/category/${category.slug}/home`);
+        const response = await api.get(`/api/products/category/${category.slug}/home`);
         setProducts(response.data);
       } catch (error) {
         console.error(`Failed to fetch products for ${category.name}:`, error);
@@ -65,10 +65,11 @@ const CategorySection: React.FC<CategorySectionProps> = ({ category }) => {
         {/* Category Banner */}
         <div className="mb-6 rounded-xl overflow-hidden h-[120px] md:h-[200px] relative group">
           <img 
-            src={category.banner} 
+            src={category.banner || '/default-banner.png'} 
             alt={category.name}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             referrerPolicy="no-referrer"
+            onError={(e) => (e.currentTarget.src = '/default-banner.png')}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-center px-6 md:px-10">
             <div className="text-white">

@@ -5,36 +5,75 @@ import { Lock, Mail, Eye, EyeOff, ArrowLeft, Loader2, ShieldCheck } from 'lucide
 import { cn } from '../lib/utils';
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('admin.tazumartbd@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
-  const { login, user } = useAuth();
+  const { login, sendMagicLink, resetPassword, user } = useAuth();
   const navigate = useNavigate();
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setSuccessMessage(null);
+    setIsResetLoading(true);
+    try {
+      await resetPassword(email);
+      setSuccessMessage('Password reset link sent! Please check your email inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset link.');
+    } finally {
+      setIsResetLoading(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    setError(null);
+    setSuccessMessage(null);
+    setIsMagicLinkLoading(true);
+    try {
+      await sendMagicLink(email);
+      setSuccessMessage('Magic link sent! Please check your email inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send magic link.');
+    } finally {
+      setIsMagicLinkLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMessage(null);
     setIsLoading(true);
 
     try {
-      // Check if it's the admin email first for better UX, 
-      // though the backend/context will handle the role assignment.
-      if (email.toLowerCase() !== 'admin.tazumartbd@gmail.com') {
+      const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+      
+      if (!adminEmails.includes(email.trim().toLowerCase())) {
         setError('Access Denied: Only authorized administrators can log in here.');
         setIsLoading(false);
         return;
       }
 
       await login(email, password);
-      // The navigate to /admin will happen in the useEffect or after login success
-      // But we can also check here if the login was successful.
-      navigate('/admin');
+      // Successful login will be handled by the useEffect redirect
     } catch (err: any) {
       console.error('Admin login error:', err);
-      setError(err.message || 'Failed to login. Please check your credentials.');
+      const isIncorrectPassword = err.message?.includes('Invalid login credentials') || err.message?.includes('incorrect');
+      const isRateLimit = err.message?.includes('rate limit');
+      
+      if (isRateLimit) {
+        setError('Too many login attempts. Please wait 5-10 minutes before trying again. This is a security measure.');
+      } else if (isIncorrectPassword) {
+        setError('The admin account exists but the password entered is incorrect. You can use a Magic Link to log in without a password.');
+      } else {
+        setError(err.message || 'Failed to login. Please check your credentials.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -43,7 +82,7 @@ export default function AdminLoginPage() {
   // If already logged in as admin, redirect
   React.useEffect(() => {
     if (user && user.role === 'ADMIN') {
-      navigate('/admin');
+      navigate('/admin/dashboard');
     }
   }, [user, navigate]);
 
@@ -77,10 +116,31 @@ export default function AdminLoginPage() {
 
             {error && (
               <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="p-1 bg-rose-500 rounded-full text-white mt-0.5">
+                <div className="p-1 bg-rose-500 rounded-full text-white mt-0.5 shrink-0">
                   <Lock size={12} />
                 </div>
-                <p className="text-xs font-bold text-rose-600 leading-relaxed">{error}</p>
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-rose-600 leading-relaxed">{error}</p>
+                  {(error.includes('incorrect') || error.includes('credentials')) && (
+                    <button 
+                      type="button"
+                      onClick={handleMagicLink}
+                      disabled={isMagicLinkLoading}
+                      className="text-[10px] font-black text-rose-700 uppercase tracking-widest hover:underline flex items-center gap-1"
+                    >
+                      {isMagicLinkLoading ? 'Sending...' : 'Send Magic Link Instead'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="p-1 bg-emerald-500 rounded-full text-white mt-0.5 shrink-0">
+                  <ShieldCheck size={12} />
+                </div>
+                <p className="text-xs font-bold text-emerald-600 leading-relaxed">{successMessage}</p>
               </div>
             )}
 
@@ -103,7 +163,17 @@ export default function AdminLoginPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
+                  <button 
+                    type="button" 
+                    onClick={handleForgotPassword}
+                    disabled={isResetLoading}
+                    className="text-[10px] font-black text-[#f85606] uppercase tracking-widest hover:underline disabled:opacity-50"
+                  >
+                    {isResetLoading ? 'Sending...' : 'Forgot?'}
+                  </button>
+                </div>
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#f85606] transition-colors">
                     <Lock size={20} />

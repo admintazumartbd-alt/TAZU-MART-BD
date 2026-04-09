@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -37,26 +37,53 @@ import {
   Pie
 } from 'recharts';
 import { cn } from '@/src/lib/utils';
-
-const data = [
-  { name: 'Mon', revenue: 4000, orders: 24, conversion: 2.4 },
-  { name: 'Tue', revenue: 3000, orders: 18, conversion: 1.8 },
-  { name: 'Wed', revenue: 2000, orders: 12, conversion: 1.2 },
-  { name: 'Thu', revenue: 2780, orders: 20, conversion: 2.0 },
-  { name: 'Fri', revenue: 1890, orders: 15, conversion: 1.5 },
-  { name: 'Sat', revenue: 2390, orders: 22, conversion: 2.2 },
-  { name: 'Sun', revenue: 3490, orders: 28, conversion: 2.8 },
-];
-
-const categoryData = [
-  { name: 'Saree', value: 400, color: '#FF6A00' },
-  { name: 'Punjabi', value: 300, color: '#3B82F6' },
-  { name: 'T-Shirts', value: 300, color: '#10B981' },
-  { name: 'Accessories', value: 200, color: '#8B5CF6' },
-];
+import axios from '../../lib/api';
 
 export default function AdminAnalytics() {
   const [timeRange, setTimeRange] = useState('7d');
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/profit-stats');
+        setStats(response.data);
+      } catch (error) {
+        console.error('Failed to fetch analytics stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [timeRange]);
+
+  const chartData = stats?.chartData || [
+    { name: 'Mon', revenue: 4000, orders: 24, conversion: 2.4 },
+    { name: 'Tue', revenue: 3000, orders: 18, conversion: 1.8 },
+    { name: 'Wed', revenue: 2000, orders: 12, conversion: 1.2 },
+    { name: 'Thu', revenue: 2780, orders: 20, conversion: 2.0 },
+    { name: 'Fri', revenue: 1890, orders: 15, conversion: 1.5 },
+    { name: 'Sat', revenue: 2390, orders: 22, conversion: 2.2 },
+    { name: 'Sun', revenue: 3490, orders: 28, conversion: 2.8 },
+  ];
+
+  const categoryData = [
+    { name: 'Saree', value: 400, color: '#FF6A00' },
+    { name: 'Punjabi', value: 300, color: '#3B82F6' },
+    { name: 'T-Shirts', value: 300, color: '#10B981' },
+    { name: 'Accessories', value: 200, color: '#8B5CF6' },
+  ];
+
+  if (loading && !stats) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -101,8 +128,8 @@ export default function AdminAnalytics() {
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
-          { label: 'Total Revenue', value: '৳ 4,28,500', icon: DollarSign, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12.5%' },
-          { label: 'Active Sessions', value: '1,240', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+8.2%' },
+          { label: 'Total Revenue', value: `৳ ${stats?.revenue?.toLocaleString() || '0'}`, icon: DollarSign, color: 'text-blue-600', bg: 'bg-blue-50', trend: `+${stats?.growth || '0'}%` },
+          { label: 'Active Sessions', value: stats?.customers?.toLocaleString() || '0', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+8.2%' },
           { label: 'Conversion Rate', value: '3.42%', icon: Target, color: 'text-[#FF6A00]', bg: 'bg-orange-50', trend: '+0.5%' },
           { label: 'Avg. Order Value', value: '৳ 2,150', icon: ShoppingBag, color: 'text-purple-600', bg: 'bg-purple-50', trend: '-1.2%' },
         ].map((stat, i) => (
@@ -150,7 +177,7 @@ export default function AdminAnalytics() {
 
           <div className="h-[400px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#FF6A00" stopOpacity={0.1}/>

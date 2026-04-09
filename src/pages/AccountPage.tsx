@@ -68,7 +68,7 @@ export default function AccountPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-bold text-[#222]">Hello, {user.name}</h2>
-              <p className="text-sm text-[#777]">Manage your account easily</p>
+              <p className="text-sm text-[#777]">{user.address || 'Manage your account easily'}</p>
             </div>
           </div>
           <button className="bg-[#fff2eb] text-[#f85606] w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#ffe5d4] transition-all">

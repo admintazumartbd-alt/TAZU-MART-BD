@@ -202,6 +202,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ]
     },
     {
+      label: 'Content Management',
+      icon: Globe,
+      subItems: [
+        { label: 'Menu Builder', path: '/admin/menus' },
+        { label: 'Dynamic Pages', path: '/admin/pages' },
+        { label: 'Offers & Coupons', path: '/admin/offers' },
+        { label: 'Contact Settings', path: '/admin/contact-settings' },
+        { label: 'Footer Settings', path: '/admin/footer' },
+      ]
+    },
+    {
       label: 'Products',
       icon: Package,
       subItems: [

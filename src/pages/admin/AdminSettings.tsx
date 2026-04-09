@@ -32,7 +32,7 @@ import {
   Activity
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import axios from 'axios';
+import axios from '../../lib/api';
 
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState('general');

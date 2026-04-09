@@ -22,13 +22,15 @@ import {
   Edit3,
   ChevronDown
 } from 'lucide-react';
+import { useAuth } from '@/src/context/AuthContext';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useActivity } from '@/src/context/ActivityContext';
-import axios from 'axios';
+import api from '@/src/lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { BD_LOCATIONS } from '@/src/data/bd-locations';
 
 export default function CheckoutPage() {
+  const { user } = useAuth();
   const { cart, totalPrice, clearCart } = useCart();
   const { logActivity } = useActivity();
   const navigate = useNavigate();
@@ -59,14 +61,26 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        name: user.name || prev.name,
+        phone: user.phone || prev.phone,
+        email: user.email || prev.email,
+        address: user.address || prev.address
+      }));
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (productId) {
       const fetchProduct = async () => {
         try {
-          const response = await axios.get(`/api/products/${productId}`);
+          const response = await api.get(`/api/products/${productId}`);
           if (response.data) {
             setDirectProduct(response.data);
           } else {
-            const allResponse = await axios.get('/api/admin/products');
+            const allResponse = await api.get('/api/admin/products');
             const found = allResponse.data.find((p: any) => p.id === productId);
             if (found) setDirectProduct(found);
           }
@@ -123,7 +137,7 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
     try {
-      const orderResponse = await axios.post('/api/orders/create', {
+      const orderResponse = await api.post('/api/orders/create', {
         customer: {
           name: formData.name,
           phone: formData.phone,
@@ -603,7 +617,13 @@ export default function CheckoutPage() {
                 {checkoutItems.map((item, i) => (
                   <div key={i} className="flex gap-4 items-center group">
                     <div className="w-[60px] h-[60px] rounded-lg overflow-hidden bg-gray-50 border border-gray-100 shrink-0">
-                      <img src={item.image} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img 
+                        src={item.image || '/default-product.png'} 
+                        alt="" 
+                        className="w-full h-full object-cover" 
+                        referrerPolicy="no-referrer" 
+                        onError={(e) => (e.currentTarget.src = '/default-product.png')}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-bold text-gray-900 truncate uppercase tracking-tight leading-tight">{item.name}</p>

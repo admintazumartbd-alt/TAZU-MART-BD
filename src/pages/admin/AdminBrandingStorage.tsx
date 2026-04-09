@@ -37,7 +37,7 @@ import {
   Gauge
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { cn } from '@/src/lib/utils';
 import { InfrastructureSettings, BrandingSettings, StorageSettings, Domain, Hosting, Upgrade } from '@/src/types';
 import { 

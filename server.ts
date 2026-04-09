@@ -5,8 +5,7 @@ import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { rateLimit } from "express-rate-limit";
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import crypto from "crypto";
@@ -24,34 +23,15 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Firebase Admin
-const firebaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "firebase-applet-config.json"), "utf8"));
+// Initialize Supabase
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ofecyuceaovtljhxnaon.supabase.co';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mZWN5dWNlYW92dGxqaHhuYW9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1Njc1OTQsImV4cCI6MjA5MTE0MzU5NH0.JMqjvcmS57suCA-W-qgWB8lsaUhKrDuuTITKV3I2q3Q';
 
-// Initialize without explicit projectId to let it pick up environment defaults.
-const app_admin = !admin.apps.length ? admin.initializeApp() : admin.app();
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-console.log("Firebase Admin initialized with environment defaults.");
+console.log("Supabase initialized.");
 
-let db: admin.firestore.Firestore;
-const configDatabaseId = firebaseConfig.firestoreDatabaseId;
-let isFirestoreAvailable = true;
-
-try {
-  // Always try to initialize with (default) if the config one is likely from a remix
-  // or just try the config one and fallback.
-  if (configDatabaseId && configDatabaseId !== "(default)") {
-    db = getFirestore(app_admin, configDatabaseId);
-    console.log(`Attempting to use database: ${configDatabaseId}`);
-  } else {
-    db = getFirestore(app_admin);
-    console.log("Using (default) database");
-  }
-} catch (error) {
-  console.warn(`Failed to initialize database, falling back to (default):`, error);
-  db = getFirestore(app_admin);
-}
-
-const settingsRef = db.collection("settings").doc("store");
+let isSupabaseAvailable = true;
 
 // Mock Data Fallback
 let MOCK_PRODUCTS_STATE = [...GENERATED_MOCK_PRODUCTS];
@@ -88,9 +68,9 @@ async function performAutoBackup() {
   try {
     console.log("Starting scheduled auto-backup...");
     let products = [];
-    if (isFirestoreAvailable) {
-      const snapshot = await db.collection("products").get();
-      products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (isSupabaseAvailable) {
+      const { data, error } = await supabase.from("products").select("*");
+      if (!error) products = data;
     } else {
       products = MOCK_PRODUCTS_STATE;
     }
@@ -143,13 +123,87 @@ const upload = multer({
 });
 
 async function startServer() {
+  console.log("startServer called");
   const app = express();
   const PORT = 3000;
 
   // Trust proxy is required for rate limiting behind a proxy
   app.set("trust proxy", 1);
 
-  app.use(cors());
+  const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) 
+    : ["*"];
+
+  app.use(cors({
+    origin: true,
+    credentials: true
+  }));
+  app.get("/api/test", (req, res) => res.json({ message: "API is reachable" }));
+
+  // --- CRITICAL ROUTES MOVED TO TOP ---
+  app.get("/api/categories", async (req, res) => {
+    console.log("GET /api/categories request received");
+    try {
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("categories").select("*").order("order", { ascending: true });
+      if (error) throw error;
+      res.json(data);
+    } catch (error) {
+      if (isSupabaseAvailable) {
+        console.warn("Supabase categories fetch failed, switching to mock data fallback.");
+        isSupabaseAvailable = false;
+      }
+      res.json(MOCK_CATEGORIES_STATE);
+    }
+  });
+
+  app.get("/api/menus", async (req, res) => {
+    console.log("GET /api/menus request received");
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("menus").select("*").eq("status", "ACTIVE").order("order", { ascending: true });
+        if (error) throw error;
+        res.json(data);
+      } else {
+        res.json([]);
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch menus:", error.message || error);
+      if (error.code === '42P01') {
+        console.error("HINT: The 'menus' table does not exist in your Supabase database. Please run the SQL setup script.");
+      }
+      // Fallback menus so the UI doesn't look empty
+      const fallbackMenus = [
+        { id: '1', name: 'Home', slug: '/', status: 'ACTIVE', order: 1, icon: 'Zap' },
+        { id: '2', name: 'Shop', slug: '/shop', status: 'ACTIVE', order: 2, icon: 'TrendingUp' },
+        { id: '3', name: 'Offers', slug: '/offers', status: 'ACTIVE', order: 3, icon: 'Percent' }
+      ];
+      res.json(fallbackMenus);
+    }
+  });
+
+  app.get("/api/products/featured", async (req, res) => {
+    console.log("GET /api/products/featured request received");
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("is_featured", true)
+          .eq("status", "ACTIVE")
+          .limit(10);
+        if (error) throw error;
+        res.json(data);
+      } else {
+        res.json(MOCK_PRODUCTS_STATE.filter(p => p.is_featured).slice(0, 10));
+      }
+    } catch (error) {
+      console.error("Failed to fetch featured products:", error);
+      res.json(MOCK_PRODUCTS_STATE.filter(p => p.is_featured).slice(0, 10));
+    }
+  });
+  // --- END CRITICAL ROUTES ---
+
   app.use(express.json());
   app.use(cookieParser());
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -157,13 +211,13 @@ async function startServer() {
   // High Traffic Protection Middleware
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 100, // Limit each IP to 100 requests per windowMs
+    limit: 1000, // Increased limit for development/testing
     standardHeaders: "draft-7",
     legacyHeaders: false,
     handler: async (req, res, next, options) => {
       try {
-        const settings = await settingsRef.get();
-        const highTrafficMode = settings.exists ? (settings.data()?.highTrafficMode || false) : false;
+        const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
+        const highTrafficMode = data?.highTrafficMode || false;
         if (highTrafficMode) {
           res.status(429).json({ error: "High traffic detected. Please try again in a few minutes." });
         } else {
@@ -176,27 +230,58 @@ async function startServer() {
     },
   });
 
-  app.use("/api/", limiter);
+  // app.use("/api/", limiter);
+
+  // Admin Authorization Middleware
+  const adminMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      
+      if (error || !user) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+      }
+
+      const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+      const isAdmin = adminEmails.includes(user.email?.toLowerCase() || '');
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Forbidden: Admin access required' });
+      }
+
+      (req as any).user = user;
+      next();
+    } catch (err) {
+      console.error('Admin middleware error:', err);
+      res.status(500).json({ error: 'Internal server error during authorization' });
+    }
+  };
+
+  // Apply admin middleware to all admin routes
+  app.use("/api/admin", adminMiddleware);
 
   // API routes FIRST
   app.get("/api/health", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const settings = await settingsRef.get();
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
       res.json({ 
         status: "ok", 
-        firestore: "connected", 
-        settingsExists: settings.exists,
-        databaseId: firebaseConfig.firestoreDatabaseId
+        supabase: "connected", 
+        settingsExists: !!data,
       });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore health check failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase health check failed.");
+        isSupabaseAvailable = false;
       }
       res.json({ 
         status: "ok", 
-        firestore: "mock_mode", 
+        supabase: "mock_mode", 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
@@ -207,13 +292,15 @@ async function startServer() {
     const { productId, quantity } = req.body;
     
     try {
-      if (isFirestoreAvailable) {
-        const productRef = db.collection("products").doc(productId);
-        const productDoc = await productRef.get();
+      if (isSupabaseAvailable) {
+        const { data: productData, error: productError } = await supabase
+          .from("products")
+          .select("stock")
+          .eq("id", productId)
+          .single();
 
-        if (productDoc.exists) {
-          const productData = productDoc.data();
-          const currentStock = productData?.stock || 0;
+        if (!productError && productData) {
+          const currentStock = productData.stock || 0;
 
           // Check available stock (including reservations)
           let reservedStock = 0;
@@ -229,7 +316,7 @@ async function startServer() {
         }
       }
 
-      // Create reservation (works in both Firestore and Mock mode)
+      // Create reservation (works in both Supabase and Mock mode)
       const reservationId = uuidv4();
       stockReservations.set(reservationId, {
         productId,
@@ -239,9 +326,9 @@ async function startServer() {
 
       res.json({ reservationId, expiresAt: stockReservations.get(reservationId)?.expiresAt });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore checkout initiation failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase checkout initiation failed.");
+        isSupabaseAvailable = false;
       }
       
       const reservationId = uuidv4();
@@ -283,20 +370,20 @@ async function startServer() {
     const { customer, items, subtotal, deliveryFee, total, paymentMethod, reservationId } = req.body;
     
     try {
-      if (isFirestoreAvailable) {
+      if (isSupabaseAvailable) {
         // Final stock check and update
-        const batch = db.batch();
         for (const item of items) {
-          const productRef = db.collection("products").doc(item.productId);
-          batch.update(productRef, {
-            stock: admin.firestore.FieldValue.increment(-item.quantity),
-            soldCount: admin.firestore.FieldValue.increment(item.quantity)
-          });
+          const { data: pData } = await supabase.from("products").select("stock, soldCount").eq("id", item.productId).single();
+          if (pData) {
+            await supabase.from("products").update({
+              stock: (pData.stock || 0) - item.quantity,
+              soldCount: (pData.soldCount || 0) + item.quantity
+            }).eq("id", item.productId);
+          }
         }
 
         const orderNumber = "ORD-" + Math.random().toString(36).substring(2, 9).toUpperCase();
         const orderId = uuidv4();
-        const orderRef = db.collection("orders").doc(orderId);
         
         const orderData = {
           id: orderId,
@@ -316,8 +403,8 @@ async function startServer() {
           userAgent: req.headers["user-agent"],
         };
 
-        batch.set(orderRef, orderData);
-        await batch.commit();
+        const { error: orderError } = await supabase.from("orders").insert(orderData);
+        if (orderError) throw orderError;
 
         if (reservationId) {
           stockReservations.delete(reservationId);
@@ -326,11 +413,11 @@ async function startServer() {
         return res.json({ success: true, orderId, orderNumber });
       }
 
-      throw new Error("Firestore unavailable");
+      throw new Error("Supabase unavailable");
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore order creation failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase order creation failed.");
+        isSupabaseAvailable = false;
       }
       
       const orderNumber = "ORD-" + Math.random().toString(36).substring(2, 9).toUpperCase();
@@ -349,9 +436,15 @@ async function startServer() {
         items,
         subtotal,
         deliveryFee,
+        shippingFee: deliveryFee,
         total,
         profit: items.reduce((acc: number, item: any) => acc + ((item.price - (item.buyingPrice || 0)) * item.quantity), 0),
         status: "PENDING",
+        history: [{
+          status: "PENDING",
+          date: new Date().toISOString(),
+          note: "Order placed successfully."
+        }],
         paymentMethod,
         paymentStatus: paymentMethod === "COD" ? "PENDING" : "PAID",
         createdAt: new Date().toISOString(),
@@ -369,18 +462,18 @@ async function startServer() {
   app.get("/api/admin/orders", async (req, res) => {
     const { userId } = req.query;
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      let query: any = db.collection("orders").orderBy("createdAt", "desc");
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      let query = supabase.from("orders").select("*").order("createdAt", { ascending: false });
       if (userId) {
-        query = query.where("userId", "==", userId);
+        query = query.eq("userId", userId);
       }
-      const snapshot = await query.get();
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const { data: orders, error } = await query;
+      if (error) throw error;
       res.json(orders);
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin orders fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin orders fetch failed.");
+        isSupabaseAvailable = false;
       }
       if (userId) {
         res.json(MOCK_ORDERS_STATE.filter(o => o.userId === userId));
@@ -401,19 +494,23 @@ async function startServer() {
         note: `Order status updated to ${status} by admin.`
       };
 
-      if (isFirestoreAvailable) {
-        const orderRef = db.collection("orders").doc(orderId);
-        const orderDoc = await orderRef.get();
+      if (isSupabaseAvailable) {
+        const { data: orderData, error: fetchError } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("id", orderId)
+          .single();
         
-        if (orderDoc.exists) {
-          const history = orderDoc.data()?.history || [];
+        if (!fetchError && orderData) {
+          const history = orderData.history || [];
           history.push(historyEntry);
           const updateData: any = { status, history, updatedAt: new Date().toISOString() };
           if (courierName) updateData.courierName = courierName;
           if (trackingId) updateData.trackingId = trackingId;
           if (estimatedDelivery) updateData.estimatedDelivery = estimatedDelivery;
           
-          await orderRef.update(updateData);
+          const { error: updateError } = await supabase.from("orders").update(updateData).eq("id", orderId);
+          if (updateError) throw updateError;
           return res.json({ success: true });
         }
       }
@@ -430,9 +527,9 @@ async function startServer() {
       res.status(404).json({ error: "Order not found" });
     } catch (error) {
       console.error("Order status update error:", error);
-      if (isFirestoreAvailable) {
-        console.warn("Firestore order status update failed, switching to mock mode.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase order status update failed, switching to mock mode.");
+        isSupabaseAvailable = false;
         
         // Retry in mock mode
         const order = MOCK_ORDERS_STATE.find(o => o.id === req.params.id);
@@ -449,20 +546,18 @@ async function startServer() {
   app.get("/api/orders/track", async (req, res) => {
     const { orderId, phone } = req.query;
     try {
-      if (isFirestoreAvailable) {
-        let query: any = db.collection("orders");
+      if (isSupabaseAvailable) {
         if (orderId) {
-          const doc = await query.doc(orderId).get();
-          if (doc.exists) {
-            const order = { id: doc.id, ...doc.data() };
+          const { data: order, error } = await supabase.from("orders").select("*").or(`id.eq.${orderId},orderNumber.eq.${orderId}`).single();
+          if (!error && order) {
             if (!phone || order.customer.phone === phone) {
               return res.json(order);
             }
           }
         } else if (phone) {
-          const snapshot = await query.where("customer.phone", "==", phone).orderBy("createdAt", "desc").limit(1).get();
-          if (!snapshot.empty) {
-            return res.json({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+          const { data: orders, error } = await supabase.from("orders").select("*").eq("customer->>phone", phone).order("createdAt", { ascending: false }).limit(1);
+          if (!error && orders && orders.length > 0) {
+            return res.json(orders[0]);
           }
         }
       }
@@ -484,9 +579,9 @@ async function startServer() {
   app.get("/api/admin/profit-stats", async (req, res) => {
     try {
       let orders = [];
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("orders").get();
-        orders = snapshot.docs.map(doc => doc.data());
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("orders").select("*");
+        if (!error && data) orders = data;
       } else {
         orders = MOCK_ORDERS_STATE;
       }
@@ -499,8 +594,21 @@ async function startServer() {
         todayProfit: todayOrders.reduce((acc, o) => acc + (o.profit || 0), 0),
         totalOrders: orders.length,
         pendingOrders: orders.filter(o => o.status === 'PENDING').length,
+        confirmedOrders: orders.filter(o => o.status === 'CONFIRMED').length,
+        processingOrders: orders.filter(o => o.status === 'PROCESSING').length,
+        shippedOrders: orders.filter(o => o.status === 'SHIPPED').length,
         deliveredOrders: orders.filter(o => o.status === 'DELIVERED').length,
         returnedOrders: orders.filter(o => o.status === 'RETURNED').length,
+        recentOrders: [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
+        topProducts: orders.length > 0 ? Object.values(orders.reduce((acc: any, o) => {
+          o.items.forEach((item: any) => {
+            if (!acc[item.productId]) {
+              acc[item.productId] = { name: item.name, sales: 0, color: '#FF6A00', image: item.image || item.images?.[0] || '/default-product.png' };
+            }
+            acc[item.productId].sales += item.quantity;
+          });
+          return acc;
+        }, {})).sort((a: any, b: any) => b.sales - a.sales).slice(0, 5) : [],
         salesData: orders.reduce((acc: any, o) => {
           const date = o.createdAt.split('T')[0];
           acc[date] = (acc[date] || 0) + o.total;
@@ -518,9 +626,9 @@ async function startServer() {
   app.get("/api/admin/customer-insights", async (req, res) => {
     try {
       let customers = [];
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("users").where("role", "==", "CUSTOMER").get();
-        customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("users").select("*").eq("role", "CUSTOMER");
+        if (!error && data) customers = data;
       } else {
         customers = MOCK_CUSTOMERS_STATE;
       }
@@ -554,9 +662,9 @@ async function startServer() {
     const { phone } = req.body;
     try {
       let orders = [];
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("orders").where("customer.phone", "==", phone).get();
-        orders = snapshot.docs.map(doc => doc.data());
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("orders").select("*").eq("customer->>phone", phone);
+        if (!error && data) orders = data;
       } else {
         orders = MOCK_ORDERS_STATE.filter(o => o.customer.phone === phone);
       }
@@ -584,10 +692,9 @@ async function startServer() {
   // Admin: Abandoned Carts
   app.get("/api/admin/abandoned-carts", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("abandoned_carts").orderBy("cartTime", "desc").get();
-        const carts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(carts);
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("abandoned_carts").select("*").order("cartTime", { ascending: false });
+        if (!error && data) return res.json(data);
       }
       res.json([]);
     } catch (error) {
@@ -597,10 +704,10 @@ async function startServer() {
 
   app.get("/api/admin/customers/:id", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const doc = await db.collection("customers").doc(req.params.id).get();
-        if (doc.exists) {
-          return res.json({ id: doc.id, ...doc.data() });
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("customers").select("*").eq("id", req.params.id).single();
+        if (!error && data) {
+          return res.json(data);
         }
       }
       
@@ -609,9 +716,9 @@ async function startServer() {
       if (mock) return res.json(mock);
       res.status(404).json({ error: "Customer not found" });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin customer fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin customer fetch failed.");
+        isSupabaseAvailable = false;
       }
       const mock = MOCK_CUSTOMERS_STATE.find(c => c.id === req.params.id);
       if (mock) return res.json(mock);
@@ -626,16 +733,16 @@ async function startServer() {
     let order: any = null;
 
     try {
-      if (isFirestoreAvailable) {
-        const orderDoc = await db.collection("orders").doc(orderId).get();
-        if (orderDoc.exists) {
-          order = { id: orderDoc.id, ...orderDoc.data() };
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("orders").select("*").eq("id", orderId).single();
+        if (!error && data) {
+          order = data;
         }
       }
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore invoice data fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase invoice data fetch failed.");
+        isSupabaseAvailable = false;
       }
     }
 
@@ -772,13 +879,13 @@ async function startServer() {
   // 6. Admin Settings API
   app.get("/api/admin/settings", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const doc = await settingsRef.get();
-      res.json(doc.data() || {});
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
+      res.json(data || {});
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin settings fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin settings fetch failed.");
+        isSupabaseAvailable = false;
       }
       res.json({});
     }
@@ -786,49 +893,36 @@ async function startServer() {
 
   app.post("/api/admin/settings", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      await settingsRef.set(req.body, { merge: true });
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { error } = await supabase.from("settings").upsert({ id: "store", ...req.body });
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin settings update failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin settings update failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to update settings" });
     }
   });
 
   // Category Management API
-  app.get("/api/categories", async (req, res) => {
-    try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const snapshot = await db.collection("categories").orderBy("order", "asc").get();
-      const categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      res.json(MOCK_CATEGORIES_STATE);
-    } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore categories fetch failed, switching to mock data fallback.");
-        isFirestoreAvailable = false;
-      }
-      res.json(MOCK_CATEGORIES_STATE);
-    }
-  });
-
   app.post("/api/admin/categories", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
       const categoryData = req.body;
-      const categoryRef = db.collection("categories").doc(categoryData.id || uuidv4());
-      await categoryRef.set({
+      const id = categoryData.id || uuidv4();
+      const { error } = await supabase.from("categories").upsert({
         ...categoryData,
-        id: categoryRef.id,
+        id,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
-      res.json({ success: true, id: categoryRef.id });
+      });
+      if (error) throw error;
+      res.json({ success: true, id });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore category update failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase category update failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to update category" });
     }
@@ -836,13 +930,14 @@ async function startServer() {
 
   app.delete("/api/admin/categories/:id", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      await db.collection("categories").doc(req.params.id).delete();
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { error } = await supabase.from("categories").delete().eq("id", req.params.id);
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore category delete failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase category delete failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to delete category" });
     }
@@ -850,19 +945,23 @@ async function startServer() {
 
   app.post("/api/admin/categories/reorder", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
       const { orders } = req.body; // Array of { id: string, order: number }
-      const batch = db.batch();
-      orders.forEach((item: any) => {
-        const ref = db.collection("categories").doc(item.id);
-        batch.update(ref, { order: item.order });
-      });
-      await batch.commit();
+      
+      // Supabase doesn't have batch updates in the same way as Firestore, 
+      // but we can use upsert with an array of objects containing the ID and the new order.
+      const updates = orders.map((item: any) => ({
+        id: item.id,
+        order: item.order
+      }));
+      
+      const { error } = await supabase.from("categories").upsert(updates);
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore category reorder failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase category reorder failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to reorder categories" });
     }
@@ -870,9 +969,10 @@ async function startServer() {
 
   app.get("/api/price-settings", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const doc = await settingsRef.get();
-      const settings = doc.data() || {};
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
+      if (error) throw error;
+      const settings = data || {};
       const priceSettings = settings.priceSettings || {
         minPrice: 500,
         maxPrice: 5000,
@@ -880,9 +980,9 @@ async function startServer() {
       };
       res.json(priceSettings);
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore price settings fetch failed, using defaults.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase price settings fetch failed, using defaults.");
+        isSupabaseAvailable = false;
       }
       res.json({
         minPrice: 500,
@@ -896,13 +996,13 @@ async function startServer() {
     try {
       let settings = {};
       
-      if (isFirestoreAvailable) {
+      if (isSupabaseAvailable) {
         try {
-          const doc = await settingsRef.get();
-          settings = doc.data() || {};
+          const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
+          if (!error && data) settings = data;
         } catch (error) {
-          console.warn("Firestore branding-storage settings fetch failed, using defaults.");
-          isFirestoreAvailable = false;
+          console.warn("Supabase branding-storage settings fetch failed, using defaults.");
+          isSupabaseAvailable = false;
         }
       }
       
@@ -991,20 +1091,22 @@ async function startServer() {
     try {
       const { infrastructure, branding, storage } = req.body;
       
-      if (isFirestoreAvailable) {
+      if (isSupabaseAvailable) {
         try {
-          await settingsRef.set({
+          const { error } = await supabase.from("settings").upsert({
+            id: "store",
             infrastructure,
             branding,
             storage
-          }, { merge: true });
+          });
+          if (error) throw error;
         } catch (error) {
-          console.warn("Firestore branding-storage settings update failed, switching to mock mode.");
-          isFirestoreAvailable = false;
+          console.warn("Supabase branding-storage settings update failed, switching to mock mode.");
+          isSupabaseAvailable = false;
         }
       }
       
-      res.json({ success: true, mock: !isFirestoreAvailable });
+      res.json({ success: true, mock: !isSupabaseAvailable });
     } catch (error) {
       console.error("Critical error in branding-storage update:", error);
       res.status(500).json({ error: "Failed to update branding & storage settings" });
@@ -1016,12 +1118,12 @@ async function startServer() {
   // Initialize Free Hosting for user (if missing)
   app.post("/api/admin/hosting/init-free", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) return res.json({ success: true, mock: true });
+      if (!isSupabaseAvailable) return res.json({ success: true, mock: true });
       
       const userId = "admin-user"; // In real app, get from auth
-      const snapshot = await db.collection("hosting").where("userId", "==", userId).where("hostingType", "==", "FREE").get();
+      const { data: hostingData, error } = await supabase.from("hosting").select("*").eq("userId", userId).eq("hostingType", "FREE").single();
       
-      if (snapshot.empty) {
+      if (error || !hostingData) {
         const id = uuidv4();
         const freeHosting = {
           id,
@@ -1037,11 +1139,12 @@ async function startServer() {
           status: 'ACTIVE',
           createdAt: new Date().toISOString()
         };
-        await db.collection("hosting").doc(id).set(freeHosting);
+        const { error: insertError } = await supabase.from("hosting").insert(freeHosting);
+        if (insertError) throw insertError;
         return res.json({ success: true, hosting: freeHosting });
       }
       
-      res.json({ success: true, hosting: snapshot.docs[0].data() });
+      res.json({ success: true, hosting: hostingData });
     } catch (error) {
       res.status(500).json({ error: "Failed to initialize free hosting" });
     }
@@ -1051,7 +1154,7 @@ async function startServer() {
   app.post("/api/admin/hosting/upgrade", async (req, res) => {
     try {
       const { plan } = req.body; // 'BASIC' or 'PRO'
-      if (!isFirestoreAvailable) return res.json({ success: true, mock: true });
+      if (!isSupabaseAvailable) return res.json({ success: true, mock: true });
       
       const userId = "admin-user";
       const upgradeId = uuidv4();
@@ -1069,19 +1172,20 @@ async function startServer() {
         createdAt: new Date().toISOString()
       };
       
-      await db.collection("upgrades").doc(upgradeId).set(upgrade);
+      const { error: upgradeError } = await supabase.from("upgrades").insert(upgrade);
+      if (upgradeError) throw upgradeError;
       
       // Update hosting to PAID
-      const hostingSnapshot = await db.collection("hosting").where("userId", "==", userId).get();
-      if (!hostingSnapshot.empty) {
-        const hostingDoc = hostingSnapshot.docs[0];
-        await hostingDoc.ref.update({
+      const { data: hostingData, error: hostingError } = await supabase.from("hosting").select("*").eq("userId", userId).single();
+      if (!hostingError && hostingData) {
+        const { error: updateError } = await supabase.from("hosting").update({
           hostingType: 'PAID',
           planName: `${plan} Plan`,
           storageLimit: plan === 'PRO' ? 20480 : 5120, // 20GB or 5GB
           bandwidthLimit: 'UNLIMITED',
           status: 'ACTIVE'
-        });
+        }).eq("id", hostingData.id);
+        if (updateError) throw updateError;
       }
       
       res.json({ success: true, upgrade });
@@ -1093,10 +1197,9 @@ async function startServer() {
   // Get all domains
   app.get("/api/admin/domains", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("domains").get();
-        const domains = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(domains);
+      if (isSupabaseAvailable) {
+        const { data: domains, error } = await supabase.from("domains").select("*");
+        if (!error && domains) return res.json(domains);
       }
       res.json([]);
     } catch (error) {
@@ -1117,8 +1220,9 @@ async function startServer() {
         createdAt: domainData.createdAt || new Date().toISOString()
       };
 
-      if (isFirestoreAvailable) {
-        await db.collection("domains").doc(id).set(domain, { merge: true });
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("domains").upsert(domain);
+        if (error) throw error;
         return res.json({ success: true, id });
       }
       res.json({ success: true, id, mock: true });
@@ -1131,22 +1235,18 @@ async function startServer() {
   app.post("/api/admin/domains/:id/verify", async (req, res) => {
     try {
       const { id } = req.params;
-      if (isFirestoreAvailable) {
-        const domainRef = db.collection("domains").doc(id);
-        const doc = await domainRef.get();
-        if (!doc.exists) return res.status(404).json({ error: "Domain not found" });
-        
-        const domain = doc.data();
+      if (isSupabaseAvailable) {
+        const { data: domain, error: fetchError } = await supabase.from("domains").select("*").eq("id", id).single();
+        if (fetchError || !domain) return res.status(404).json({ error: "Domain not found" });
         
         // Auto Link System: Check for active hosting
-        const hostingSnapshot = await db.collection("hosting").where("status", "==", "ACTIVE").limit(1).get();
+        const { data: hostingData, error: hostingFetchError } = await supabase.from("hosting").select("*").eq("status", "ACTIVE").limit(1).single();
         let activeHostingIp = '1.2.3.4'; // Default fallback
         let activeHostingId = null;
 
-        if (!hostingSnapshot.empty) {
-          const hosting = hostingSnapshot.docs[0].data();
-          activeHostingIp = hosting.serverIp;
-          activeHostingId = hosting.id;
+        if (!hostingFetchError && hostingData) {
+          activeHostingIp = hostingData.serverIp;
+          activeHostingId = hostingData.id;
         }
 
         // DNS Verification Logic (Hybrid)
@@ -1162,16 +1262,18 @@ async function startServer() {
         }
 
         if (isVerified) {
-          await domainRef.update({ status: "CONNECTED" });
+          const { error: updateError } = await supabase.from("domains").update({ status: "CONNECTED" }).eq("id", id);
+          if (updateError) throw updateError;
           
           if (activeHostingId) {
             const mapId = uuidv4();
-            await db.collection("domain_hosting_map").doc(mapId).set({
+            const { error: mapError } = await supabase.from("domain_hosting_map").insert({
               id: mapId,
               domainId: id,
               hostingId: activeHostingId,
               linked: "YES"
             });
+            if (mapError) throw mapError;
           }
         }
 
@@ -1186,10 +1288,9 @@ async function startServer() {
   // Get all hosting
   app.get("/api/admin/hosting", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("hosting").get();
-        const hosting = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(hosting);
+      if (isSupabaseAvailable) {
+        const { data: hosting, error } = await supabase.from("hosting").select("*");
+        if (!error && hosting) return res.json(hosting);
       }
       res.json([]);
     } catch (error) {
@@ -1209,8 +1310,9 @@ async function startServer() {
         createdAt: hostingData.createdAt || new Date().toISOString()
       };
 
-      if (isFirestoreAvailable) {
-        await db.collection("hosting").doc(id).set(hosting, { merge: true });
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("hosting").upsert(hosting);
+        if (error) throw error;
         return res.json({ success: true, id });
       }
       res.json({ success: true, id, mock: true });
@@ -1219,41 +1321,17 @@ async function startServer() {
     }
   });
 
-  app.get("/api/products/featured", async (req, res) => {
-    try {
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("products")
-          .where("is_featured", "==", true)
-          .where("is_deleted", "==", false)
-          .orderBy("createdAt", "desc")
-          .limit(8)
-          .get();
-        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(products);
-      }
-      
-      const products = MOCK_PRODUCTS_STATE
-        .filter(p => p.is_featured && !p.is_deleted)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 8);
-      res.json(products);
-    } catch (error) {
-      console.error("Featured products fetch error:", error);
-      res.json([]);
-    }
-  });
-
   app.get("/api/products/home", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("products")
-          .where("show_in_home", "==", true)
-          .where("is_deleted", "==", false)
-          .orderBy("createdAt", "desc")
-          .limit(8)
-          .get();
-        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(products);
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("show_in_home", true)
+          .eq("is_deleted", false)
+          .order("createdAt", { ascending: false })
+          .limit(8);
+        if (!error && data) return res.json(data);
       }
       
       const products = MOCK_PRODUCTS_STATE
@@ -1272,21 +1350,22 @@ async function startServer() {
       const { slug } = req.params;
       const { subcategory } = req.query;
       
-      if (isFirestoreAvailable) {
-        let query: admin.firestore.Query = db.collection("products")
-          .where("category", "==", slug)
-          .where("is_deleted", "==", false);
+      if (isSupabaseAvailable) {
+        let query = supabase
+          .from("products")
+          .select("*")
+          .eq("category", slug)
+          .eq("is_deleted", false);
           
         if (subcategory) {
-          query = query.where("subcategories", "array-contains", subcategory);
+          query = query.contains("subcategories", [subcategory]);
         }
         
-        const snapshot = await query
-          .orderBy("createdAt", "desc")
-          .limit(8)
-          .get();
-        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return res.json(products);
+        const { data: products, error } = await query
+          .order("createdAt", { ascending: false })
+          .limit(8);
+          
+        if (!error && products) return res.json(products);
       }
       
       let products = MOCK_PRODUCTS_STATE
@@ -1303,7 +1382,7 @@ async function startServer() {
       res.json(products);
     } catch (error) {
       console.error("Category home products fetch error:", error);
-      // Don't disable Firestore globally for a query error (might be missing index)
+      // Don't disable Supabase globally for a query error (might be missing index)
       res.json([]);
     }
   });
@@ -1313,26 +1392,26 @@ async function startServer() {
       const { slug } = req.params;
       const { subcategory, min, max } = req.query;
       
-      if (isFirestoreAvailable) {
-        let query: admin.firestore.Query = db.collection("products")
-          .where("category", "==", slug)
-          .where("is_deleted", "==", false);
+      if (isSupabaseAvailable) {
+        let query = supabase
+          .from("products")
+          .select("*")
+          .eq("category", slug)
+          .eq("is_deleted", false);
           
         if (subcategory) {
-          query = query.where("subcategories", "array-contains", subcategory);
+          query = query.contains("subcategories", [subcategory]);
         }
         
-        const snapshot = await query
-          .orderBy("createdAt", "desc")
-          .get();
+        const { data: products, error } = await query
+          .order("createdAt", { ascending: false });
           
-        let products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-        
-        // Filter by price in memory if needed (Firestore doesn't support range on one field and sort on another without complex indexes)
-        if (min) products = products.filter(p => p.price >= Number(min));
-        if (max) products = products.filter(p => p.price <= Number(max));
-        
-        return res.json(products);
+        if (!error && products) {
+          let filteredProducts = products;
+          if (min) filteredProducts = filteredProducts.filter(p => p.price >= Number(min));
+          if (max) filteredProducts = filteredProducts.filter(p => p.price <= Number(max));
+          return res.json(filteredProducts);
+        }
       }
       
       let products = MOCK_PRODUCTS_STATE
@@ -1354,21 +1433,32 @@ async function startServer() {
 
   app.get("/api/products", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
       const { min, max, category, subcategory } = req.query;
-      let query: admin.firestore.Query = db.collection("products");
+      let query = supabase.from("products").select("*");
 
       if (category) {
-        query = query.where("category", "==", category);
+        query = query.eq("category", category);
       }
 
       if (subcategory) {
-        query = query.where("subcategories", "array-contains", subcategory);
+        query = query.contains("subcategories", [subcategory]);
       }
 
-      const snapshot = await query.get();
-      let products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter((p: any) => !p.deletedAt);
+      if (req.query.isNewArrival === 'true') {
+        query = query.eq("isNewArrival", true);
+      }
+      if (req.query.isBestSelling === 'true') {
+        query = query.eq("isBestSelling", true);
+      }
+      if (req.query.isOfferProduct === 'true') {
+        query = query.eq("isOfferProduct", true);
+      }
+
+      const { data: productsData, error } = await query;
+      if (error) throw error;
+      
+      let products = (productsData || []).filter((p: any) => !p.deletedAt);
 
       if (min) {
         products = products.filter((p: any) => p.price >= Number(min));
@@ -1379,11 +1469,11 @@ async function startServer() {
 
       res.json(products);
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore products fetch failed, using mock products.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase products fetch failed, using mock products.");
+        isSupabaseAvailable = false;
       }
-      const { min, max, category, subcategory } = req.query;
+      const { min, max, category, subcategory, isNewArrival, isBestSelling, isOfferProduct } = req.query;
       let products = [...MOCK_PRODUCTS_STATE];
       
       if (category) {
@@ -1391,6 +1481,15 @@ async function startServer() {
       }
       if (subcategory) {
         products = products.filter(p => p.subcategories?.includes(subcategory as string));
+      }
+      if (isNewArrival === 'true') {
+        products = products.filter((p: any) => p.isNewArrival || p.isNew);
+      }
+      if (isBestSelling === 'true') {
+        products = products.filter((p: any) => p.isBestSelling || p.isBestSeller);
+      }
+      if (isOfferProduct === 'true') {
+        products = products.filter((p: any) => p.isOfferProduct || (p.oldPrice && p.oldPrice > p.price));
       }
       if (min) {
         products = products.filter(p => p.price >= Number(min));
@@ -1400,6 +1499,269 @@ async function startServer() {
       }
       
       res.json(products);
+    }
+  });
+
+  // Dynamic Menus API
+  app.post("/api/admin/menus", async (req, res) => {
+    try {
+      const menu = req.body;
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("menus").upsert(menu);
+        if (error) throw error;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save menu" });
+    }
+  });
+
+  // Dynamic Pages API
+  app.get("/api/pages/:slug", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("pages").select("*").eq("slug", req.params.slug).eq("status", "PUBLISHED").single();
+        if (!error && data) {
+          return res.json(data);
+        }
+      }
+      // Mock fallback for common pages
+      if (req.params.slug === 'about-us') {
+        return res.json({
+          title: 'About Tazu Mart BD',
+          content: '<p>Tazu Mart BD is your premium destination for fashion and lifestyle in Bangladesh.</p>',
+          bannerImage: 'https://picsum.photos/seed/about/1200/400'
+        });
+      }
+      res.status(404).json({ error: "Page not found" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch page" });
+    }
+  });
+
+  app.get("/api/admin/pages", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("pages").select("*");
+        if (!error && data) return res.json(data);
+      }
+      res.json([]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pages" });
+    }
+  });
+
+  app.post("/api/admin/pages", async (req, res) => {
+    try {
+      const page = req.body;
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("pages").upsert({
+          ...page,
+          id: page.id || uuidv4(),
+          createdAt: page.createdAt || new Date().toISOString()
+        });
+        if (error) throw error;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save page" });
+    }
+  });
+
+  // Offers API
+  app.get("/api/offers", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("offers").select("*").eq("status", "ACTIVE");
+        if (!error && data) return res.json(data);
+      }
+      res.json([
+        { id: '1', title: 'Eid Special Discount', type: 'DISCOUNT', bannerImage: 'https://picsum.photos/seed/offer1/1200/400', status: 'ACTIVE' }
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch offers" });
+    }
+  });
+
+  app.post("/api/admin/offers", async (req, res) => {
+    try {
+      const offer = req.body;
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("offers").upsert({
+          ...offer,
+          id: offer.id || uuidv4()
+        });
+        if (error) throw error;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save offer" });
+    }
+  });
+
+  // Contact Settings API
+  app.get("/api/settings/contact", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("settings").select("*").eq("id", "contact").single();
+        if (!error && data) return res.json(data);
+      }
+      res.json({
+        phone: '01700000000',
+        whatsapp: '01700000000',
+        email: 'info@tazumartbd.com',
+        address: 'Dhaka, Bangladesh',
+        messengerLink: 'https://m.me/tazumartbd',
+        googleMapEmbed: ''
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch contact settings" });
+    }
+  });
+
+  app.post("/api/admin/settings/contact", async (req, res) => {
+    try {
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("settings").upsert({ id: "contact", ...req.body });
+        if (error) throw error;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save contact settings" });
+    }
+  });
+
+  app.get("/api/admin/transactions", async (req, res) => {
+    try {
+      // In a real app, this would fetch from a transactions table
+      // For now, we'll derive some from orders or use mock data
+      res.json([
+        { id: 'TX-8421', order: '#ORD-8421', customer: 'Rahat Khan', method: 'bKash', amount: '৳ 1,200', status: 'Completed', date: '2 hours ago' },
+        { id: 'TX-8422', order: '#ORD-8422', customer: 'Sumi Akter', method: 'Nagad', amount: '৳ 2,500', status: 'Pending', date: '5 hours ago' },
+        { id: 'TX-8423', order: '#ORD-8423', customer: 'Jasim Uddin', method: 'COD', amount: '৳ 3,800', status: 'Completed', date: '12 hours ago' },
+        { id: 'TX-8424', order: '#ORD-8424', customer: 'Nila Islam', method: 'Rocket', amount: '৳ 900', status: 'Failed', date: '1 day ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  app.get("/api/admin/reports", async (req, res) => {
+    try {
+      res.json([
+        { id: 'REP-1024', name: 'Monthly Sales Report - March 2026', type: 'Sales', format: 'PDF', status: 'Ready', date: '2 hours ago' },
+        { id: 'REP-1025', name: 'Inventory Audit Log', type: 'Inventory', format: 'Excel', status: 'Ready', date: '5 hours ago' },
+        { id: 'REP-1026', name: 'Customer Behavior Analysis', type: 'Analytics', format: 'PDF', status: 'Processing', date: '12 hours ago' },
+        { id: 'REP-1027', name: 'Tax Compliance Statement', type: 'Finance', format: 'PDF', status: 'Ready', date: '1 day ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  app.get("/api/admin/vendors", async (req, res) => {
+    try {
+      res.json([
+        { id: 'V-1001', name: 'Aarong Textiles', category: 'Saree & Fabrics', products: 124, sales: '৳ 4,28,500', rating: 4.8, status: 'Active' },
+        { id: 'V-1002', name: 'Yellow Fashion', category: 'Ready-to-Wear', products: 86, sales: '৳ 2,15,000', rating: 4.5, status: 'Active' },
+        { id: 'V-1003', name: 'Apex Footwear', category: 'Shoes & Accessories', products: 42, sales: '৳ 84,200', rating: 4.2, status: 'Pending' },
+        { id: 'V-1004', name: 'Cats Eye', category: 'Menswear', products: 68, sales: '৳ 1,12,000', rating: 4.6, status: 'Active' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vendors" });
+    }
+  });
+
+  app.get("/api/admin/reviews", async (req, res) => {
+    try {
+      res.json([
+        { id: 'REV-5001', product: 'Jamdani Saree', customer: 'Anika Rahman', rating: 5, comment: 'Absolutely beautiful! The quality is top-notch.', status: 'Published', date: '1 hour ago' },
+        { id: 'REV-5002', product: 'Cotton Punjabi', customer: 'Karim Ahmed', rating: 4, comment: 'Good fit, but color is slightly different from photo.', status: 'Pending', date: '3 hours ago' },
+        { id: 'REV-5003', product: 'Silk Scarf', customer: 'Farhana Yeasmin', rating: 2, comment: 'Material feels a bit rough. Not what I expected.', status: 'Flagged', date: '6 hours ago' },
+        { id: 'REV-5004', product: 'Leather Wallet', customer: 'Tanvir Hossain', rating: 5, comment: 'Great value for money. Very durable.', status: 'Published', date: '12 hours ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reviews" });
+    }
+  });
+
+  app.get("/api/admin/admins", async (req, res) => {
+    try {
+      res.json([
+        { id: 'ADM-1001', name: 'Tazu Mart Admin', email: 'admin.tazumartbd@gmail.com', role: 'Super Admin', status: 'Active', lastLogin: '2 hours ago' },
+        { id: 'ADM-1002', name: 'Sumi Akter', email: 'sumi@tazumart.com', role: 'Editor', status: 'Active', lastLogin: '5 hours ago' },
+        { id: 'ADM-1003', name: 'Rahat Khan', email: 'rahat@tazumart.com', role: 'Support', status: 'Active', lastLogin: '12 hours ago' },
+        { id: 'ADM-1004', name: 'Jasim Uddin', email: 'jasim@tazumart.com', role: 'Viewer', status: 'Inactive', lastLogin: '1 week ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch admins" });
+    }
+  });
+
+  app.get("/api/admin/abandoned-carts", async (req, res) => {
+    try {
+      res.json([
+        { id: 1, customer: 'Rahat Khan', email: 'rahat@example.com', phone: '01712345678', product: 'Premium Cotton T-Shirt', price: '৳ 1,200', time: '2 hours ago', items: 3, status: 'High Intent' },
+        { id: 2, customer: 'Sumi Akter', email: 'sumi@example.com', phone: '01812345678', product: 'Slim Fit Denim Jeans', price: '৳ 2,500', time: '5 hours ago', items: 1, status: 'Medium Intent' },
+        { id: 3, customer: 'Jasim Uddin', email: 'jasim@example.com', phone: '01912345678', product: 'Wireless Bluetooth Earbuds', price: '৳ 3,800', time: '12 hours ago', items: 2, status: 'Low Intent' },
+        { id: 4, customer: 'Nila Islam', email: 'nila@example.com', phone: '01612345678', product: 'Leather Wallet', price: '৳ 900', time: '1 day ago', items: 1, status: 'High Intent' },
+        { id: 5, customer: 'Abir Hasan', email: 'abir@example.com', phone: '01512345678', product: 'Casual Polo Shirt', price: '৳ 1,500', time: '2 days ago', items: 4, status: 'Medium Intent' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch abandoned carts" });
+    }
+  });
+
+  app.get("/api/admin/shipments", async (req, res) => {
+    try {
+      res.json([
+        { id: 'SH-1024', order: '#ORD-8421', customer: 'Rahat Khan', method: 'Pathao Courier', destination: 'Dhaka, BD', status: 'In Transit', date: '2 hours ago' },
+        { id: 'SH-1025', order: '#ORD-8422', customer: 'Sumi Akter', method: 'RedX Delivery', destination: 'Chittagong, BD', status: 'Delivered', date: '5 hours ago' },
+        { id: 'SH-1026', order: '#ORD-8423', customer: 'Jasim Uddin', method: 'Paperfly', destination: 'Sylhet, BD', status: 'Pending', date: '12 hours ago' },
+        { id: 'SH-1027', order: '#ORD-8424', customer: 'Nila Islam', method: 'Store Pickup', destination: 'Dhaka, BD', status: 'Ready', date: '1 day ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch shipments" });
+    }
+  });
+
+  app.get("/api/admin/campaigns", async (req, res) => {
+    try {
+      res.json([
+        { id: 1, name: 'Summer Flash Sale 2026', type: 'Flash Sale', status: 'Active', reach: '12.4k', conversion: '4.2%', budget: '৳ 15,000', end: '2 days left' },
+        { id: 2, name: 'New Arrival Promo', type: 'Email Campaign', status: 'Scheduled', reach: '8.2k', conversion: '-', budget: '৳ 5,000', end: 'Starts in 1d' },
+        { id: 3, name: 'Eid Special Collection', type: 'Social Media', status: 'Completed', reach: '45.8k', conversion: '6.8%', budget: '৳ 50,000', end: 'Ended' },
+        { id: 4, name: 'First Order Discount', type: 'Coupon', status: 'Active', reach: '2.1k', conversion: '12.5%', budget: '৳ 0', end: 'Ongoing' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch campaigns" });
+    }
+  });
+
+  app.get("/api/admin/inventory", async (req, res) => {
+    try {
+      res.json([
+        { id: 1, name: 'Premium Cotton T-Shirt', sku: 'TSH-001', stock: 5, minStock: 10, category: 'Apparel', image: 'https://picsum.photos/seed/tshirt/100/100', status: 'Low Stock', price: 1250 },
+        { id: 2, name: 'Slim Fit Denim Jeans', sku: 'JNS-002', stock: 3, minStock: 5, category: 'Apparel', image: 'https://picsum.photos/seed/jeans/100/100', status: 'Low Stock', price: 2450 },
+        { id: 3, name: 'Wireless Bluetooth Earbuds', sku: 'EBD-003', stock: 0, minStock: 15, category: 'Electronics', image: 'https://picsum.photos/seed/earbuds/100/100', status: 'Out of Stock', price: 3500 },
+        { id: 4, name: 'Leather Wallet', sku: 'WLT-004', stock: 45, minStock: 10, category: 'Accessories', image: 'https://picsum.photos/seed/wallet/100/100', status: 'In Stock', price: 850 },
+        { id: 5, name: 'Casual Polo Shirt', sku: 'POL-005', stock: 12, minStock: 10, category: 'Apparel', image: 'https://picsum.photos/seed/polo/100/100', status: 'In Stock', price: 1100 },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch inventory" });
+    }
+  });
+
+  app.get("/api/admin/support-notes", async (req, res) => {
+    try {
+      res.json([
+        { id: 1, customer: 'Rahat Khan', note: 'Customer prefers fast delivery via Pathao. High priority.', admin: 'Admin', date: '2 hours ago' },
+        { id: 2, customer: 'Sumi Akter', note: 'High return rate on apparel items. Double check sizing before shipping.', admin: 'Admin', date: '5 hours ago' },
+        { id: 3, customer: 'Jasim Uddin', note: 'Requested call before delivery. Address is slightly hard to find.', admin: 'Admin', date: '1 day ago' },
+        { id: 4, customer: 'Nila Islam', note: 'Regular customer. Always pays via bKash. Loyal buyer.', admin: 'Admin', date: '2 days ago' },
+      ]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch support notes" });
     }
   });
 
@@ -1451,17 +1813,14 @@ async function startServer() {
 
   app.get("/api/admin/customers", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const customersSnapshot = await db.collection("users").get();
-      const customers = customersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data: customers, error } = await supabase.from("users").select("*");
+      if (error) throw error;
       res.json(customers);
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin customers fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin customers fetch failed.");
+        isSupabaseAvailable = false;
       }
       res.json([]);
     }
@@ -1486,9 +1845,9 @@ async function startServer() {
         updatedAt: new Date().toISOString()
       };
 
-      if (isFirestoreAvailable) {
-        const productRef = db.collection("products").doc(newId);
-        await productRef.set(product);
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("products").insert(product);
+        if (error) throw error;
         return res.json({ success: true, id: newId });
       }
 
@@ -1497,9 +1856,9 @@ async function startServer() {
       res.json({ success: true, id: newId, mock: true });
     } catch (error) {
       console.error("Product creation error:", error);
-      if (isFirestoreAvailable) {
-        console.warn("Firestore product creation failed, switching to mock mode.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase product creation failed, switching to mock mode.");
+        isSupabaseAvailable = false;
         
         // Retry in mock mode
         const productData = req.body;
@@ -1537,17 +1896,23 @@ async function startServer() {
         updateData.is_deleted = bodyIsDeleted;
       }
 
-      if (isFirestoreAvailable) {
-        const productRef = db.collection("products").doc(productId);
+      if (isSupabaseAvailable) {
+        const { data: existingProduct, error: fetchError } = await supabase
+          .from("products")
+          .select("id")
+          .eq("id", productId)
+          .single();
         
-        // Verify product exists before updating
-        const doc = await productRef.get();
-        if (!doc.exists) {
+        if (fetchError || !existingProduct) {
           return res.status(404).json({ error: "Product not found" });
         }
 
-        // Use update() for partial updates (Firestore native behavior)
-        await productRef.update(updateData);
+        const { error: updateError } = await supabase
+          .from("products")
+          .update(updateData)
+          .eq("id", productId);
+          
+        if (updateError) throw updateError;
         return res.json({ success: true });
       }
 
@@ -1575,12 +1940,12 @@ async function startServer() {
       const productId = req.params.id;
       const deletedAt = new Date().toISOString();
 
-      if (isFirestoreAvailable) {
-        const productRef = db.collection("products").doc(productId);
-        await productRef.update({ 
+      if (isSupabaseAvailable) {
+        const { error } = await supabase.from("products").update({ 
           is_deleted: true,
           deletedAt 
-        });
+        }).eq("id", productId);
+        if (error) throw error;
         return res.json({ success: true });
       }
 
@@ -1601,9 +1966,9 @@ async function startServer() {
   app.get("/api/admin/backup", async (req, res) => {
     try {
       let products = [];
-      if (isFirestoreAvailable) {
-        const snapshot = await db.collection("products").get();
-        products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("products").select("*");
+        if (!error && data) products = data;
       } else {
         products = MOCK_PRODUCTS_STATE;
       }
@@ -1633,26 +1998,18 @@ async function startServer() {
       const { data } = req.body;
       if (!data) return res.status(400).json({ error: "No data provided" });
 
-      if (isFirestoreAvailable) {
-        const batch = db.batch();
-        
+      if (isSupabaseAvailable) {
         // Restore Products
-        if (data.products) {
-          data.products.forEach((p: any) => {
-            const ref = db.collection("products").doc(p.id);
-            batch.set(ref, p, { merge: true });
-          });
+        if (data.products && data.products.length > 0) {
+          const { error: pError } = await supabase.from("products").upsert(data.products);
+          if (pError) throw pError;
         }
         
         // Restore Categories
-        if (data.categories) {
-          data.categories.forEach((c: any) => {
-            const ref = db.collection("categories").doc(c.id);
-            batch.set(ref, c, { merge: true });
-          });
+        if (data.categories && data.categories.length > 0) {
+          const { error: cError } = await supabase.from("categories").upsert(data.categories);
+          if (cError) throw cError;
         }
-
-        await batch.commit();
       }
 
       // Update Mock State
@@ -1670,7 +2027,7 @@ async function startServer() {
 
   app.post("/api/product/:id/reviews", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
       const { id } = req.params;
       const reviewData = req.body;
       
@@ -1684,30 +2041,38 @@ async function startServer() {
         createdAt: new Date().toISOString()
       };
 
-      const productRef = db.collection("products").doc(id);
-      const productDoc = await productRef.get();
+      if (isSupabaseAvailable) {
+        const { data: product, error: fetchError } = await supabase
+          .from("products")
+          .select("*")
+          .eq("id", id)
+          .single();
 
-      if (productDoc.exists) {
-        const product = productDoc.data();
-        const currentReviews = product?.productReviews || [];
-        const newReviews = [review, ...currentReviews];
-        
-        // Update rating and review count
-        const totalRating = newReviews.reduce((sum: number, r: any) => sum + r.rating, 0);
-        const avgRating = parseFloat((totalRating / newReviews.length).toFixed(1));
+        if (!fetchError && product) {
+          const currentReviews = product.productReviews || [];
+          const newReviews = [review, ...currentReviews];
+          
+          // Update rating and review count
+          const totalRating = newReviews.reduce((sum: number, r: any) => sum + r.rating, 0);
+          const avgRating = parseFloat((totalRating / newReviews.length).toFixed(1));
 
-        await productRef.update({
-          productReviews: newReviews,
-          rating: avgRating,
-          reviews: newReviews.length
-        });
+          const { error: updateError } = await supabase
+            .from("products")
+            .update({
+              productReviews: newReviews,
+              rating: avgRating,
+              reviews: newReviews.length
+            })
+            .eq("id", id);
+          if (updateError) throw updateError;
+        }
       }
 
       res.status(201).json(review);
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore review submission failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase review submission failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to submit review" });
     }
@@ -1715,22 +2080,17 @@ async function startServer() {
 
   app.get("/api/admin/products", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const productsSnapshot = await db.collection("products").get();
-      if (productsSnapshot.empty) {
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data: products, error } = await supabase.from("products").select("*");
+      if (error) throw error;
+      if (!products || products.length === 0) {
         return res.json(MOCK_PRODUCTS_STATE);
       }
-      const products = productsSnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .filter((p: any) => !p.deletedAt);
-      res.json(MOCK_PRODUCTS_STATE);
+      res.json(products.filter((p: any) => !p.deletedAt));
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin products fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin products fetch failed.");
+        isSupabaseAvailable = false;
       }
       res.json(MOCK_PRODUCTS_STATE);
     }
@@ -1738,17 +2098,16 @@ async function startServer() {
 
   app.get("/api/products/:id", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
-      const productDoc = await db.collection("products").doc(req.params.id).get();
-      if (productDoc.exists) {
-        const data = productDoc.data();
-        if (data?.deletedAt) {
+      if (!isSupabaseAvailable) throw new Error("Supabase unavailable");
+      const { data, error } = await supabase.from("products").select("*").eq("id", req.params.id).single();
+      if (!error && data) {
+        if (data.deletedAt) {
           return res.status(404).json({ error: "Product not found" });
         }
-        return res.json({ id: productDoc.id, ...data });
+        return res.json(data);
       }
       
-      // Fallback to mock data if not found in Firestore
+      // Fallback to mock data if not found in Supabase
       const mockProduct = GENERATED_MOCK_PRODUCTS.find(p => p.id === req.params.id);
       if (mockProduct) {
         return res.json(mockProduct);
@@ -1756,9 +2115,9 @@ async function startServer() {
       
       res.status(404).json({ error: "Product not found" });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore product fetch failed for ID:", req.params.id);
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase product fetch failed for ID:", req.params.id);
+        isSupabaseAvailable = false;
       }
       
       // Fallback to mock data on permission error or other Firestore issues
@@ -1773,14 +2132,13 @@ async function startServer() {
 
   app.get("/api/product/:id", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const productDoc = await db.collection("products").doc(req.params.id).get();
-        if (productDoc.exists) {
-          const data = productDoc.data();
-          if (data?.deletedAt) {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("products").select("*").eq("id", req.params.id).single();
+        if (!error && data) {
+          if (data.deletedAt) {
             return res.status(404).json({ error: "Product not found" });
           }
-          return res.json({ id: productDoc.id, ...data });
+          return res.json(data);
         }
       }
       
@@ -1792,9 +2150,9 @@ async function startServer() {
       
       res.status(404).json({ error: "Product not found" });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore single product fetch failed, switching to mock data.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase single product fetch failed, switching to mock data.");
+        isSupabaseAvailable = false;
       }
       
       // Fallback to mock data on permission error or other Firestore issues
@@ -1809,10 +2167,10 @@ async function startServer() {
 
   app.get("/api/admin/orders/:id", async (req, res) => {
     try {
-      if (isFirestoreAvailable) {
-        const orderDoc = await db.collection("orders").doc(req.params.id).get();
-        if (orderDoc.exists) {
-          return res.json({ id: orderDoc.id, ...orderDoc.data() });
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("orders").select("*").eq("id", req.params.id).single();
+        if (!error && data) {
+          return res.json(data);
         }
       }
       
@@ -1821,9 +2179,9 @@ async function startServer() {
       if (mock) return res.json(mock);
       res.status(404).json({ error: "Order not found" });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore admin order fetch failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase admin order fetch failed.");
+        isSupabaseAvailable = false;
       }
       const mock = MOCK_ORDERS_STATE.find(o => o.id === req.params.id);
       if (mock) return res.json(mock);
@@ -1833,26 +2191,26 @@ async function startServer() {
 
   app.post("/api/admin/products/soft-delete-category", async (req, res) => {
     try {
-      if (!isFirestoreAvailable) throw new Error("Firestore unavailable");
       const { category } = req.body;
       if (!category) {
         return res.status(400).json({ error: "Category is required" });
       }
 
-      const productsSnapshot = await db.collection("products").where("category", "==", category).get();
-      const batch = db.batch();
-      const now = new Date().toISOString();
-
-      productsSnapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { deletedAt: now });
-      });
-
-      await batch.commit();
-      res.json({ success: true, count: productsSnapshot.size });
+      if (isSupabaseAvailable) {
+        const now = new Date().toISOString();
+        const { error, count } = await supabase
+          .from("products")
+          .update({ deletedAt: now })
+          .eq("category", category);
+        
+        if (error) throw error;
+        return res.json({ success: true, count });
+      }
+      res.json({ success: true, count: 0 });
     } catch (error) {
-      if (isFirestoreAvailable) {
-        console.warn("Firestore soft delete failed.");
-        isFirestoreAvailable = false;
+      if (isSupabaseAvailable) {
+        console.warn("Supabase soft delete failed.");
+        isSupabaseAvailable = false;
       }
       res.status(500).json({ error: "Failed to soft delete products" });
     }
@@ -1873,35 +2231,39 @@ async function startServer() {
     });
   }
 
+  // Global error handler for Express
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Unhandled Express Error:", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
+  });
+
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
-    // Test Firestore connection on startup
+    // Test Supabase connection on startup
     try {
-      const settings = await settingsRef.get();
-      console.log(`Firestore connected successfully to database: ${firebaseConfig.firestoreDatabaseId}`);
-      console.log(`Settings document exists: ${settings.exists}`);
-      
-      // Seed initial products if empty
-      const productsSnapshot = await db.collection("products").limit(1).get();
-      if (productsSnapshot.empty) {
-        console.log("Seeding initial products...");
-        const batch = db.batch();
-        MOCK_PRODUCTS_STATE.forEach(product => {
-          const ref = db.collection("products").doc(product.id);
-          batch.set(ref, {
+      if (isSupabaseAvailable) {
+        const { data, error } = await supabase.from("settings").select("*").eq("id", "store").single();
+        if (error && error.code !== 'PGRST116') throw error;
+        console.log(`Supabase connected successfully.`);
+        
+        // Seed initial products if empty
+        const { data: products, error: productsError } = await supabase.from("products").select("id").limit(1);
+        if (!productsError && (!products || products.length === 0)) {
+          console.log("Seeding initial products...");
+          const productsToSeed = MOCK_PRODUCTS_STATE.map(product => ({
             ...product,
             status: "ACTIVE",
             createdAt: new Date().toISOString()
-          });
-        });
-        await batch.commit();
-        console.log("Seeding complete.");
+          }));
+          const { error: seedError } = await supabase.from("products").insert(productsToSeed);
+          if (seedError) console.error("Seeding failed:", seedError);
+          else console.log("Seeding complete.");
+        }
       }
     } catch (error) {
-      isFirestoreAvailable = false;
-      console.warn("Firestore is not available. The application will use mock data fallbacks.");
-      console.info("To enable Firestore, please ensure the Cloud Firestore API is enabled in your Google Cloud project.");
+      isSupabaseAvailable = false;
+      console.warn("Supabase is not available. The application will use mock data fallbacks.");
     }
   });
 }

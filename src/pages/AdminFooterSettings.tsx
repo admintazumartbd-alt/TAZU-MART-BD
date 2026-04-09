@@ -7,7 +7,8 @@ import { Save, Plus, Trash2, MoveVertical } from 'lucide-react';
 export default function AdminFooterSettings() {
   const { footerSettings, updateFooterSettings } = useSettings();
   const { user } = useAuth();
-  const isAdmin = user?.email.toLowerCase() === 'admin.tazumartbd@gmail.com';
+  const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+  const isAdmin = adminEmails.includes(user?.email.toLowerCase() || '');
   const navigate = useNavigate();
   const [localSettings, setLocalSettings] = useState(footerSettings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');

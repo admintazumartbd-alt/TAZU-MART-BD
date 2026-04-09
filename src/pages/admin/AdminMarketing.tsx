@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Megaphone, 
   Tag, 
@@ -19,17 +19,39 @@ import {
   MoreHorizontal,
   ArrowUpRight,
   Gift,
-  Ticket
+  Ticket,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminMarketing() {
-  const campaigns = [
-    { id: 1, name: 'Summer Flash Sale 2026', type: 'Flash Sale', status: 'Active', reach: '12.4k', conversion: '4.2%', budget: '৳ 15,000', end: '2 days left' },
-    { id: 2, name: 'New Arrival Promo', type: 'Email Campaign', status: 'Scheduled', reach: '8.2k', conversion: '-', budget: '৳ 5,000', end: 'Starts in 1d' },
-    { id: 3, name: 'Eid Special Collection', type: 'Social Media', status: 'Completed', reach: '45.8k', conversion: '6.8%', budget: '৳ 50,000', end: 'Ended' },
-    { id: 4, name: 'First Order Discount', type: 'Coupon', status: 'Active', reach: '2.1k', conversion: '12.5%', budget: '৳ 0', end: 'Ongoing' },
-  ];
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/campaigns');
+        setCampaigns(response.data);
+      } catch (error) {
+        console.error('Failed to fetch campaigns:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCampaigns();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">

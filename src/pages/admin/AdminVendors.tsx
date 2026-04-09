@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Store, 
@@ -18,17 +18,39 @@ import {
   Mail, 
   Phone,
   MapPin,
-  Building2
+  Building2,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminVendors() {
-  const vendors = [
-    { id: 'V-1001', name: 'Aarong Textiles', category: 'Saree & Fabrics', products: 124, sales: '৳ 4,28,500', rating: 4.8, status: 'Active' },
-    { id: 'V-1002', name: 'Yellow Fashion', category: 'Ready-to-Wear', products: 86, sales: '৳ 2,15,000', rating: 4.5, status: 'Active' },
-    { id: 'V-1003', name: 'Apex Footwear', category: 'Shoes & Accessories', products: 42, sales: '৳ 84,200', rating: 4.2, status: 'Pending' },
-    { id: 'V-1004', name: 'Cats Eye', category: 'Menswear', products: 68, sales: '৳ 1,12,000', rating: 4.6, status: 'Active' },
-  ];
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/vendors');
+        setVendors(response.data);
+      } catch (error) {
+        console.error('Failed to fetch vendors:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVendors();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -63,7 +85,7 @@ export default function AdminVendors() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
-          { label: 'Total Vendors', value: '42', icon: Store, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+4' },
+          { label: 'Total Vendors', value: vendors.length.toString(), icon: Store, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+4' },
           { label: 'Vendor Products', value: '1,240', icon: Package, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+124' },
           { label: 'Marketplace Sales', value: '৳ 8.4M', icon: DollarSign, color: 'text-[#FF6A00]', bg: 'bg-orange-50', trend: '+18.5%' },
           { label: 'Avg. Rating', value: '4.6', icon: Star, color: 'text-purple-600', bg: 'bg-purple-50', trend: '+0.2' },

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ProductCard from '@/src/components/ProductCard';
 import { Search as SearchIcon } from 'lucide-react';
-import axios from 'axios';
+import api from '@/src/lib/api';
 
 export default function SearchPage() {
   const location = useLocation();
@@ -13,7 +13,7 @@ export default function SearchPage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await axios.get('/api/admin/products');
+        const response = await api.get('/api/admin/products');
         setProducts(response.data.filter((p: any) => 
           p.name.toLowerCase().includes(query.toLowerCase()) ||
           p.category.toLowerCase().includes(query.toLowerCase())

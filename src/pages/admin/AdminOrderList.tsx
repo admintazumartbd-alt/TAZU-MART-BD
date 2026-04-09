@@ -29,7 +29,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { formatPrice, cn } from '@/src/lib/utils';
 
 export default function AdminOrderList({ status }: { status?: string }) {

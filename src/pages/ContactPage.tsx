@@ -1,19 +1,44 @@
-import React from 'react';
-import { Phone, Mail, MapPin, MessageCircle, Facebook, Instagram, Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Phone, Mail, MapPin, MessageCircle, Facebook, Instagram, Send, Loader2 } from 'lucide-react';
+import { ContactSettings } from '../types';
+import axios from '../lib/api';
 
 export default function ContactPage() {
+  const [settings, setSettings] = useState<ContactSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get('/api/settings/contact')
+      .then(res => {
+        if (res.data && !res.data.error) {
+          setSettings(res.data);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     alert('Thank you for your message! We will get back to you soon.');
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-[#f85606] animate-spin" />
+        <p className="text-gray-500 font-medium animate-pulse">Loading Contact Info...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="pb-20">
       {/* Header */}
-      <div className="bg-[#E91E63] text-white py-16 md:py-24">
+      <div className="bg-[#f85606] text-white py-16 md:py-24">
         <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
           <h1 className="text-4xl md:text-6xl font-bold">Contact Us</h1>
-          <p className="text-pink-100 max-w-2xl mx-auto text-lg">
+          <p className="text-orange-100 max-w-2xl mx-auto text-lg">
             Have questions? We're here to help you 24/7.
           </p>
         </div>
@@ -28,33 +53,33 @@ export default function ContactPage() {
               
               <div className="space-y-6">
                 <div className="flex items-start gap-4">
-                  <div className="bg-pink-50 p-3 rounded-xl text-[#E91E63]">
+                  <div className="bg-orange-50 p-3 rounded-xl text-[#f85606]">
                     <Phone size={24} />
                   </div>
                   <div>
                     <p className="font-bold text-[#111111]">Phone</p>
-                    <p className="text-gray-500">01XXXXXXXXX</p>
+                    <p className="text-gray-500">{settings?.phone || '01XXXXXXXXX'}</p>
                     <p className="text-xs text-gray-400 mt-1">Sat - Thu, 10am - 8pm</p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-4">
-                  <div className="bg-pink-50 p-3 rounded-xl text-[#E91E63]">
+                  <div className="bg-orange-50 p-3 rounded-xl text-[#f85606]">
                     <Mail size={24} />
                   </div>
                   <div>
                     <p className="font-bold text-[#111111]">Email</p>
-                    <p className="text-gray-500">info@tazumartbd.com</p>
+                    <p className="text-gray-500">{settings?.email || 'info@tazumartbd.com'}</p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-4">
-                  <div className="bg-pink-50 p-3 rounded-xl text-[#E91E63]">
+                  <div className="bg-orange-50 p-3 rounded-xl text-[#f85606]">
                     <MapPin size={24} />
                   </div>
                   <div>
                     <p className="font-bold text-[#111111]">Office</p>
-                    <p className="text-gray-500">Dhaka, Bangladesh</p>
+                    <p className="text-gray-500">{settings?.address || 'Dhaka, Bangladesh'}</p>
                   </div>
                 </div>
               </div>
@@ -62,13 +87,13 @@ export default function ContactPage() {
               <div className="pt-6 border-t">
                 <p className="font-bold text-[#111111] mb-4">Follow Us</p>
                 <div className="flex gap-4">
-                  <a href="#" className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#E91E63] hover:text-white transition-all">
+                  <a href="#" className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#f85606] hover:text-white transition-all">
                     <Facebook size={20} />
                   </a>
-                  <a href="#" className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#E91E63] hover:text-white transition-all">
+                  <a href="#" className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#f85606] hover:text-white transition-all">
                     <Instagram size={20} />
                   </a>
-                  <a href="#" className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#E91E63] hover:text-white transition-all">
+                  <a href={settings?.messengerLink || "#"} className="bg-gray-100 p-3 rounded-full text-gray-600 hover:bg-[#f85606] hover:text-white transition-all">
                     <MessageCircle size={20} />
                   </a>
                 </div>
@@ -77,7 +102,7 @@ export default function ContactPage() {
 
             {/* WhatsApp Quick Link */}
             <a 
-              href="https://wa.me/8801XXXXXXXXX" 
+              href={`https://wa.me/${settings?.whatsapp || '8801XXXXXXXXX'}`} 
               target="_blank" 
               rel="noreferrer"
               className="bg-[#25D366] text-white p-6 rounded-2xl shadow-lg flex items-center justify-between group"

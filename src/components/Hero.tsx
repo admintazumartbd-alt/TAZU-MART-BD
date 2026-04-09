@@ -18,6 +18,10 @@ export default function Hero() {
   const next = () => setCurrent((prev) => (prev + 1) % HERO_BANNERS.length);
   const prev = () => setCurrent((prev) => (prev - 1 + HERO_BANNERS.length) % HERO_BANNERS.length);
 
+  if (!HERO_BANNERS || HERO_BANNERS.length === 0) {
+    return null;
+  }
+
   return (
     <section className="relative w-full h-[180px] sm:h-[220px] md:h-[300px] lg:h-[360px] overflow-hidden bg-gray-100 mb-4">
       <AnimatePresence mode="wait">
@@ -30,10 +34,11 @@ export default function Hero() {
           className="absolute inset-0"
         >
           <img 
-            src={HERO_BANNERS[current].image} 
+            src={HERO_BANNERS[current].image || '/default-hero.png'} 
             alt={HERO_BANNERS[current].title}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
+            onError={(e) => (e.currentTarget.src = '/default-hero.png')}
           />
           <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
             <div className="max-w-7xl mx-auto px-4 w-full text-center">

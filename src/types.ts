@@ -51,6 +51,9 @@ export interface Product {
   rating: number;
   reviews: number;
   soldCount?: number; // Initial Sold Count
+  isNewArrival?: boolean;
+  isBestSelling?: boolean;
+  isOfferProduct?: boolean;
   isNew?: boolean;
   isBestSeller?: boolean;
   show_in_home?: boolean;
@@ -339,4 +342,44 @@ export interface DomainHostingMap {
   domainId: string;
   hostingId: string;
   linked: 'YES' | 'NO';
+}
+
+export interface NavMenu {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  order: number;
+  icon?: string;
+}
+
+export interface Page {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  bannerImage?: string;
+  seoTitle?: string;
+  metaDescription?: string;
+  status: 'PUBLISHED' | 'DRAFT';
+  createdAt: string;
+}
+
+export interface Offer {
+  id: string;
+  title: string;
+  type: 'DISCOUNT' | 'COUPON' | 'BANNER';
+  couponCode?: string;
+  expiryDate: string;
+  bannerImage?: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'DRAFT';
+}
+
+export interface ContactSettings {
+  phone: string;
+  whatsapp: string;
+  email: string;
+  address: string;
+  messengerLink: string;
+  googleMapEmbed: string;
 }

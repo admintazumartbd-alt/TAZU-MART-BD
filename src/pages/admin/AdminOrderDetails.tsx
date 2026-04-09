@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { 
   ArrowLeft, 
   Printer, 
@@ -214,7 +214,12 @@ export default function AdminOrderDetails() {
                 <div key={item.id} className="p-10 flex items-center justify-between group hover:bg-gray-50/50 transition-all">
                   <div className="flex items-center gap-8">
                     <div className="w-24 h-24 rounded-[24px] overflow-hidden border border-gray-100 shrink-0 shadow-sm group-hover:shadow-md transition-all">
-                      <img src={item.image || item.images?.[0] || 'https://picsum.photos/seed/placeholder/100/100'} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <img 
+                        src={item.image || item.images?.[0] || '/default-product.png'} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+                        onError={(e) => (e.currentTarget.src = '/default-product.png')}
+                      />
                     </div>
                     <div>
                       <p className="text-lg font-black text-gray-900 group-hover:text-[#FF6A00] transition-colors leading-tight uppercase tracking-tight">{item.name}</p>

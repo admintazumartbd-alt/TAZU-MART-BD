@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShoppingCart, 
   Clock, 
@@ -19,18 +19,39 @@ import {
   Zap,
   AlertCircle,
   XCircle,
-  Send
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminAbandonedCart() {
-  const abandonedCarts = [
-    { id: 1, customer: 'Rahat Khan', email: 'rahat@example.com', phone: '01712345678', product: 'Premium Cotton T-Shirt', price: '৳ 1,200', time: '2 hours ago', items: 3, status: 'High Intent' },
-    { id: 2, customer: 'Sumi Akter', email: 'sumi@example.com', phone: '01812345678', product: 'Slim Fit Denim Jeans', price: '৳ 2,500', time: '5 hours ago', items: 1, status: 'Medium Intent' },
-    { id: 3, customer: 'Jasim Uddin', email: 'jasim@example.com', phone: '01912345678', product: 'Wireless Bluetooth Earbuds', price: '৳ 3,800', time: '12 hours ago', items: 2, status: 'Low Intent' },
-    { id: 4, customer: 'Nila Islam', email: 'nila@example.com', phone: '01612345678', product: 'Leather Wallet', price: '৳ 900', time: '1 day ago', items: 1, status: 'High Intent' },
-    { id: 5, customer: 'Abir Hasan', email: 'abir@example.com', phone: '01512345678', product: 'Casual Polo Shirt', price: '৳ 1,500', time: '2 days ago', items: 4, status: 'Medium Intent' },
-  ];
+  const [abandonedCarts, setAbandonedCarts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAbandonedCarts = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/abandoned-carts');
+        setAbandonedCarts(response.data);
+      } catch (error) {
+        console.error('Failed to fetch abandoned carts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAbandonedCarts();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -65,7 +86,7 @@ export default function AdminAbandonedCart() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
-          { label: 'Abandoned Carts', value: '42', icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12%', up: true },
+          { label: 'Abandoned Carts', value: abandonedCarts.length.toString(), icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12%', up: true },
           { label: 'Potential Revenue', value: '৳ 84,200', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+8.4%', up: true },
           { label: 'Recovery Rate', value: '18.5%', icon: Zap, color: 'text-[#FF6A00]', bg: 'bg-orange-50', trend: '+2.1%', up: true },
           { label: 'Avg. Cart Value', value: '৳ 2,150', icon: ShoppingBag, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '-1.2%', up: false },
@@ -181,7 +202,7 @@ export default function AdminAbandonedCart() {
         {/* Pagination Section */}
         <div className="px-10 py-8 bg-gray-50/50 border-t border-gray-50 flex flex-col sm:flex-row items-center justify-between gap-6">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
-            Showing <span className="text-gray-900">5</span> of <span className="text-gray-900">42</span> Abandoned Carts
+            Showing <span className="text-gray-900">{abandonedCarts.length}</span> of <span className="text-gray-900">42</span> Abandoned Carts
           </p>
           <div className="flex items-center gap-3">
             <button className="w-12 h-12 flex items-center justify-center rounded-2xl border border-gray-200 text-gray-400 cursor-not-allowed bg-white shadow-sm">

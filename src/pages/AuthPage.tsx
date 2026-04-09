@@ -12,16 +12,58 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '', name: '', phone: '' });
-  const { login, register, loginWithGoogle, loginWithFacebook, user } = useAuth();
+  const [formData, setFormData] = useState({ email: '', password: '', name: '', phone: '', address: '' });
+  const { login, register, loginWithGoogle, loginWithFacebook, sendMagicLink, resetPassword, user } = useAuth();
   const { cart, mergeCart } = useCart();
   const navigate = useNavigate();
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleForgotPassword = async () => {
+    if (!formData.email) {
+      setError("Please enter your email first.");
+      return;
+    }
+    setError(null);
+    setSuccessMessage(null);
+    setIsResetLoading(true);
+    try {
+      await resetPassword(formData.email);
+      setSuccessMessage("Password reset link sent! Please check your email.");
+    } catch (err: any) {
+      setError(err.message || "Failed to send reset link.");
+    } finally {
+      setIsResetLoading(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    if (!formData.email) {
+      setError("Please enter your email first.");
+      return;
+    }
+    setError(null);
+    setSuccessMessage(null);
+    setIsMagicLinkLoading(true);
+    try {
+      await sendMagicLink(formData.email);
+      setSuccessMessage("Magic link sent! Please check your email.");
+    } catch (err: any) {
+      setError(err.message || "Failed to send magic link.");
+    } finally {
+      setIsMagicLinkLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
     try {
       const guestCart = [...cart];
       if (activeTab === 'login') {
@@ -30,8 +72,13 @@ export default function AuthPage() {
         await register(formData);
       }
       if (guestCart.length > 0) mergeCart(guestCart);
-    } catch (error) {
-      console.error("Auth error:", error);
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      if (err.message?.includes('rate limit')) {
+        setError("Too many attempts. Please wait a few minutes before trying again.");
+      } else {
+        setError(err.message || "Authentication failed. Please check your credentials.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +114,7 @@ export default function AuthPage() {
   useEffect(() => {
     if (user) {
       if (user.role === 'ADMIN') {
-        navigate('/admin');
+        navigate('/admin/dashboard');
       } else {
         navigate('/account');
       }
@@ -82,6 +129,36 @@ export default function AuthPage() {
           <h1 className="text-[30px] font-bold text-[#f85606] mb-2">TAZU MART BD</h1>
           <p className="text-[#666] text-sm">Welcome back! Login or create your account</p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="p-1 bg-rose-500 rounded-full text-white mt-0.5 shrink-0">
+              <Lock size={12} />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-rose-600 leading-relaxed">{error}</p>
+              {((formData.email.trim().toLowerCase() === 'admin.tazumart060@gmail.com' || formData.email.trim().toLowerCase() === 'admin.tazumartbd@gmail.com') && (error.includes('incorrect') || error.includes('credentials'))) && (
+                <button 
+                  type="button"
+                  onClick={handleMagicLink}
+                  disabled={isMagicLinkLoading}
+                  className="text-[10px] font-black text-rose-700 uppercase tracking-widest hover:underline flex items-center gap-1"
+                >
+                  {isMagicLinkLoading ? 'Sending...' : 'Send Magic Link Instead'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="p-1 bg-emerald-500 rounded-full text-white mt-0.5 shrink-0">
+              <ShieldCheck size={12} />
+            </div>
+            <p className="text-xs font-bold text-emerald-600 leading-relaxed">{successMessage}</p>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex bg-[#fff2eb] rounded-[12px] p-1 mb-6">
@@ -117,16 +194,40 @@ export default function AuthPage() {
                 className="space-y-4"
               >
                 {activeTab === 'register' && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[#333]">Full Name</label>
-                    <input 
-                      required
-                      type="text" 
-                      placeholder="Enter your full name"
-                      className="w-full px-[15px] py-[14px] border border-[#ddd] rounded-[12px] focus:border-[#f85606] focus:ring-4 focus:ring-[#f85606]/10 focus:outline-none transition-all text-[15px]"
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-[#333]">Full Name</label>
+                      <input 
+                        required
+                        type="text" 
+                        placeholder="Full Name"
+                        className="w-full px-[15px] py-[14px] border border-[#ddd] rounded-[12px] focus:border-[#f85606] focus:ring-4 focus:ring-[#f85606]/10 focus:outline-none transition-all text-[15px]"
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-[#333]">Phone Number</label>
+                      <input 
+                        required
+                        type="tel" 
+                        placeholder="01XXXXXXXXX"
+                        className="w-full px-[15px] py-[14px] border border-[#ddd] rounded-[12px] focus:border-[#f85606] focus:ring-4 focus:ring-[#f85606]/10 focus:outline-none transition-all text-[15px]"
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-[#333]">Address</label>
+                      <input 
+                        required
+                        type="text" 
+                        placeholder="Enter your address"
+                        className="w-full px-[15px] py-[14px] border border-[#ddd] rounded-[12px] focus:border-[#f85606] focus:ring-4 focus:ring-[#f85606]/10 focus:outline-none transition-all text-[15px]"
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div className="space-y-2">
@@ -140,26 +241,22 @@ export default function AuthPage() {
                   />
                 </div>
 
-                {activeTab === 'register' && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[#333]">Phone Number</label>
-                    <input 
-                      required
-                      type="tel" 
-                      placeholder="01XXXXXXXXX"
-                      className="w-full px-[15px] py-[14px] border border-[#ddd] rounded-[12px] focus:border-[#f85606] focus:ring-4 focus:ring-[#f85606]/10 focus:outline-none transition-all text-[15px]"
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                  </div>
-                )}
+                {activeTab === 'register' ? null : null}
 
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="block text-sm font-semibold text-[#333]">Password</label>
-                    {activeTab === 'login' && (
-                      <button type="button" className="text-xs text-[#f85606] font-bold hover:underline">Forgot?</button>
-                    )}
-                  </div>
+                    <div className="flex justify-between items-center">
+                      <label className="block text-sm font-semibold text-[#333]">Password</label>
+                      {activeTab === 'login' && (
+                        <button 
+                          type="button" 
+                          onClick={handleForgotPassword}
+                          disabled={isResetLoading}
+                          className="text-xs text-[#f85606] font-bold hover:underline disabled:opacity-50"
+                        >
+                          {isResetLoading ? 'Sending...' : 'Forgot?'}
+                        </button>
+                      )}
+                    </div>
                   <div className="relative">
                     <input 
                       required

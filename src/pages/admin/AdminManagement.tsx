@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   ShieldCheck, 
@@ -19,17 +19,39 @@ import {
   Edit3, 
   Trash2,
   UserCheck,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminManagement() {
-  const admins = [
-    { id: 'ADM-1001', name: 'Tazu Mart Admin', email: 'admin.tazumartbd@gmail.com', role: 'Super Admin', status: 'Active', lastLogin: '2 hours ago' },
-    { id: 'ADM-1002', name: 'Sumi Akter', email: 'sumi@tazumart.com', role: 'Editor', status: 'Active', lastLogin: '5 hours ago' },
-    { id: 'ADM-1003', name: 'Rahat Khan', email: 'rahat@tazumart.com', role: 'Support', status: 'Active', lastLogin: '12 hours ago' },
-    { id: 'ADM-1004', name: 'Jasim Uddin', email: 'jasim@tazumart.com', role: 'Viewer', status: 'Inactive', lastLogin: '1 week ago' },
-  ];
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/admins');
+        setAdmins(response.data);
+      } catch (error) {
+        console.error('Failed to fetch admins:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdmins();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -64,7 +86,7 @@ export default function AdminManagement() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
-          { label: 'Total Admins', value: '12', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+2' },
+          { label: 'Total Admins', value: admins.length.toString(), icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+2' },
           { label: 'Active Sessions', value: '4', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '0' },
           { label: 'Security Score', value: '98%', icon: ShieldCheck, color: 'text-[#FF6A00]', bg: 'bg-orange-50', trend: '+1.5%' },
           { label: 'Pending Invites', value: '2', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50', trend: '-1' },

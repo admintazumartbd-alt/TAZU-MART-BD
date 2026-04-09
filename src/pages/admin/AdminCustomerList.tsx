@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { 
   Search, 
   Filter, 
@@ -263,7 +263,12 @@ export default function AdminCustomerList() {
                         <td className="px-6 py-8">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-xl overflow-hidden border border-gray-100 shadow-sm shrink-0">
-                              <img src={customer.image || customer.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.fullName || 'User')}&background=random`} alt={customer.fullName} className="w-full h-full object-cover" />
+                              <img 
+                                src={customer.image || customer.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.fullName || 'User')}&background=random`} 
+                                alt={customer.fullName} 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => (e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.fullName || 'User')}&background=random`)}
+                              />
                             </div>
                             <p className="text-xs font-black text-gray-900 leading-none uppercase tracking-tight group-hover:text-[#FF6A00] transition-colors">{customer.fullName || 'Anonymous'}</p>
                           </div>
@@ -322,7 +327,11 @@ export default function AdminCustomerList() {
             {customers.map((customer) => (
               <div key={customer.id} className="p-6 bg-gray-50 rounded-3xl border border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <img src={customer.image || `https://ui-avatars.com/api/?name=${customer.fullName}`} className="w-12 h-12 rounded-xl" />
+                  <img 
+                    src={customer.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.fullName || 'User')}`} 
+                    className="w-12 h-12 rounded-xl" 
+                    onError={(e) => (e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(customer.fullName || 'User')}`)}
+                  />
                   <div>
                     <p className="text-sm font-black text-gray-900 uppercase tracking-tight">{customer.fullName}</p>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Last Login: {customer.lastLogin ? new Date(customer.lastLogin).toLocaleString() : 'N/A'}</p>

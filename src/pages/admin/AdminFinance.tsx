@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -22,14 +22,40 @@ import {
   FileText
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminFinance() {
-  const transactions = [
-    { id: 'TX-8421', order: '#ORD-8421', customer: 'Rahat Khan', method: 'bKash', amount: '৳ 1,200', status: 'Completed', date: '2 hours ago' },
-    { id: 'TX-8422', order: '#ORD-8422', customer: 'Sumi Akter', method: 'Nagad', amount: '৳ 2,500', status: 'Pending', date: '5 hours ago' },
-    { id: 'TX-8423', order: '#ORD-8423', customer: 'Jasim Uddin', method: 'COD', amount: '৳ 3,800', status: 'Completed', date: '12 hours ago' },
-    { id: 'TX-8424', order: '#ORD-8424', customer: 'Nila Islam', method: 'Rocket', amount: '৳ 900', status: 'Failed', date: '1 day ago' },
-  ];
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [txRes, statsRes] = await Promise.all([
+          axios.get('/api/admin/transactions'),
+          axios.get('/api/admin/profit-stats')
+        ]);
+        setTransactions(txRes.data);
+        setStats(statsRes.data);
+      } catch (error) {
+        console.error('Failed to fetch finance data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -64,7 +90,7 @@ export default function AdminFinance() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
-          { label: 'Total Revenue', value: '৳ 4,28,500', icon: Banknote, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12.5%' },
+          { label: 'Total Revenue', value: `৳ ${stats?.revenue?.toLocaleString() || '0'}`, icon: Banknote, color: 'text-blue-600', bg: 'bg-blue-50', trend: `+${stats?.growth || '0'}%` },
           { label: 'Pending Payouts', value: '৳ 12,450', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '-2.4%' },
           { label: 'Net Profit', value: '৳ 84,200', icon: TrendingUp, color: 'text-[#FF6A00]', bg: 'bg-orange-50', trend: '+5.8%' },
           { label: 'Refund Rate', value: '1.2%', icon: RefreshCw, color: 'text-rose-600', bg: 'bg-rose-50', trend: '-0.2%' },

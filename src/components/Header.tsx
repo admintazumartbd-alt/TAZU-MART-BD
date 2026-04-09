@@ -1,30 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, ShoppingCart, Heart, User, Menu, X, Phone, MessageCircle, Facebook, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, ShoppingCart, Heart, User, Menu, X, Phone, MessageCircle, Facebook, ShieldCheck, ChevronDown, ChevronRight, Zap, TrendingUp, Percent, Info, HelpCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useCart } from '@/src/context/CartContext';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Category } from '@/src/types';
+import axios from '@/src/lib/api';
+
+interface NavMenu {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  order: number;
+}
+
+const IconMap: Record<string, any> = {
+  Zap,
+  TrendingUp,
+  Percent,
+  Info,
+  Phone,
+  HelpCircle,
+  MessageCircle,
+  Facebook,
+  ShieldCheck,
+  Search,
+  ShoppingCart,
+  Heart,
+  User,
+  Menu,
+  X,
+  ChevronDown,
+  ChevronRight
+};
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
+  const [menus, setMenus] = useState<NavMenu[]>([]);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { totalItems } = useCart();
   const { wishlist } = useWishlist();
   const { user, isAuthenticated } = useAuth();
-  const isAdmin = user?.email.toLowerCase() === 'admin.tazumartbd@gmail.com';
+  const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
-    fetch('/api/categories')
-      .then(res => res.json())
-      .then(data => setCategories(data))
+    // Fetch Categories
+    axios.get('/api/categories')
+      .then(res => setCategories(res.data))
       .catch(err => console.error("Failed to fetch categories:", err));
+
+    // Fetch Menus
+    axios.get('/api/menus')
+      .then(res => setMenus(res.data))
+      .catch(err => console.error("Failed to fetch menus:", err));
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -37,6 +73,12 @@ export default function Header() {
 
   const toggleCategory = (id: string) => {
     setExpandedCategory(expandedCategory === id ? null : id);
+  };
+
+  const renderIcon = (iconName?: string, size = 16) => {
+    if (!iconName || !IconMap[iconName]) return null;
+    const IconComponent = IconMap[iconName];
+    return <IconComponent size={size} />;
   };
 
   return (
@@ -118,8 +160,16 @@ export default function Header() {
       <nav className="hidden md:block border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4">
           <ul className="flex items-center gap-8 py-3 text-sm font-medium text-[#111111]">
-            <li><Link to="/" className="hover:text-[#f85606]">Home</Link></li>
-            <li><Link to="/shop" className="hover:text-[#f85606]">Shop</Link></li>
+            <li>
+              <Link to="/" className={cn("hover:text-[#f85606] transition-colors", location.pathname === '/' && "text-[#f85606]")}>
+                Home
+              </Link>
+            </li>
+            <li>
+              <Link to="/shop" className={cn("hover:text-[#f85606] transition-colors", location.pathname === '/shop' && "text-[#f85606]")}>
+                Shop
+              </Link>
+            </li>
             <li className="relative group">
               <button className="flex items-center gap-1 hover:text-[#f85606]">
                 Categories
@@ -144,11 +194,20 @@ export default function Header() {
                 ))}
               </div>
             </li>
-            <li><Link to="/new-arrivals" className="hover:text-[#f85606]">New Arrivals</Link></li>
-            <li><Link to="/best-selling" className="hover:text-[#f85606]">Best Selling</Link></li>
-            <li><Link to="/offers" className="hover:text-[#f85606]">Offers</Link></li>
-            <li><Link to="/about" className="hover:text-[#f85606]">About Us</Link></li>
-            <li><Link to="/contact" className="hover:text-[#f85606]">Contact Us</Link></li>
+            {menus.map(menu => (
+              <li key={menu.id}>
+                <Link 
+                  to={`/${menu.slug}`} 
+                  className={cn(
+                    "flex items-center gap-1.5 hover:text-[#f85606] transition-colors",
+                    location.pathname === `/${menu.slug}` && "text-[#f85606]"
+                  )}
+                >
+                  {renderIcon(menu.icon)}
+                  {menu.name}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       </nav>
@@ -249,11 +308,21 @@ export default function Header() {
                 </div>
               </li>
 
-              <li><Link to="/new-arrivals" onClick={() => setIsMenuOpen(false)} className="block py-2 hover:text-[#f85606]">New Arrivals</Link></li>
-              <li><Link to="/best-selling" onClick={() => setIsMenuOpen(false)} className="block py-2 hover:text-[#f85606]">Best Selling</Link></li>
-              <li><Link to="/offers" onClick={() => setIsMenuOpen(false)} className="block py-2 hover:text-[#f85606]">Offers</Link></li>
-              <li><Link to="/about" onClick={() => setIsMenuOpen(false)} className="block py-2 hover:text-[#f85606]">About Us</Link></li>
-              <li><Link to="/contact" onClick={() => setIsMenuOpen(false)} className="block py-2 hover:text-[#f85606]">Contact Us</Link></li>
+              {menus.map(menu => (
+                <li key={menu.id}>
+                  <Link 
+                    to={`/${menu.slug}`} 
+                    onClick={() => setIsMenuOpen(false)} 
+                    className={cn(
+                      "flex items-center gap-2 py-2 hover:text-[#f85606] transition-colors",
+                      location.pathname === `/${menu.slug}` && "font-bold text-[#f85606]"
+                    )}
+                  >
+                    {renderIcon(menu.icon, 18)}
+                    {menu.name}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>

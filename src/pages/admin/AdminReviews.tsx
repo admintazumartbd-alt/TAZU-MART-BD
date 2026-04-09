@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Star, 
   MessageSquare, 
@@ -18,17 +18,41 @@ import {
   AlertCircle, 
   XCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  ShoppingBag,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminReviews() {
-  const reviews = [
-    { id: 1, customer: 'Rahat Khan', product: 'Premium Cotton T-Shirt', rating: 5, comment: 'Excellent quality and perfect fit. Highly recommended!', status: 'Published', date: '2 hours ago' },
-    { id: 2, customer: 'Sumi Akter', product: 'Slim Fit Denim Jeans', rating: 4, comment: 'Good jeans, but the color is slightly different from the photo.', status: 'Published', date: '5 hours ago' },
-    { id: 3, customer: 'Jasim Uddin', product: 'Wireless Bluetooth Earbuds', rating: 2, comment: 'Battery life is very poor. Disappointed with the purchase.', status: 'Pending', date: '12 hours ago' },
-    { id: 4, customer: 'Nila Islam', product: 'Leather Wallet', rating: 5, comment: 'Beautiful wallet, very premium feel.', status: 'Published', date: '1 day ago' },
-  ];
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/reviews');
+        setReviews(response.data);
+      } catch (error) {
+        console.error('Failed to fetch reviews:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReviews();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -151,6 +175,7 @@ export default function AdminReviews() {
                           "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border shadow-sm",
                           review.status === 'Published' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
                           review.status === 'Pending' ? "bg-orange-50 text-[#FF6A00] border-orange-100" :
+                          review.status === 'Flagged' ? "bg-rose-50 text-rose-600 border-rose-100" :
                           "bg-gray-50 text-gray-500 border-gray-100"
                         )}>
                           {review.status}

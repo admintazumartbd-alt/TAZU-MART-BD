@@ -1,7 +1,57 @@
-import React from 'react';
-import { ShieldCheck, Truck, RotateCcw, Headphones, Heart } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, Truck, RotateCcw, Headphones, Loader2 } from 'lucide-react';
+import axios from '../lib/api';
+
+interface PageData {
+  title: string;
+  content: string;
+  bannerImage?: string;
+}
 
 export default function AboutPage() {
+  const [pageData, setPageData] = useState<PageData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get('/api/pages/about')
+      .then(res => {
+        if (res.data && !res.data.error) {
+          setPageData(res.data);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-[#f85606] animate-spin" />
+        <p className="text-gray-500 font-medium animate-pulse">Loading About Us...</p>
+      </div>
+    );
+  }
+
+  if (pageData) {
+    return (
+      <div className="pb-20">
+        <div className="bg-[#111111] text-white py-16 md:py-24">
+          <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
+            <h1 className="text-4xl md:text-6xl font-bold">{pageData.title}</h1>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 -mt-12">
+          <div className="bg-white rounded-3xl shadow-xl p-8 md:p-16">
+            <div 
+              className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-600 prose-img:rounded-2xl"
+              dangerouslySetInnerHTML={{ __html: pageData.content }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pb-20">
       {/* Header */}

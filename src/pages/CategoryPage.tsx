@@ -4,7 +4,7 @@ import { MOCK_PRODUCTS } from '@/src/constants';
 import ProductCard from '@/src/components/ProductCard';
 import { Filter, LayoutGrid, List, Star, ChevronRight } from 'lucide-react';
 import { cn, formatPrice } from '@/src/lib/utils';
-import axios from 'axios';
+import api from '@/src/lib/api';
 import { motion } from 'motion/react';
 import { Product, PriceSettings, Category } from '@/src/types';
 
@@ -26,8 +26,8 @@ export default function CategoryPage() {
     const fetchInitialData = async () => {
       try {
         const [priceRes, catRes] = await Promise.all([
-          axios.get('/api/price-settings'),
-          axios.get('/api/categories')
+          api.get('/api/price-settings'),
+          api.get('/api/categories')
         ]);
         if (priceRes.data && typeof priceRes.data === 'object' && !priceRes.data.error) {
           setPriceSettings(priceRes.data);
@@ -55,7 +55,7 @@ export default function CategoryPage() {
         setIsLoading(true);
         
         // Fetch Home Products (Top 8)
-        const homeResponse = await axios.get(`/api/products/category/${slug}/home`, {
+        const homeResponse = await api.get(`/api/products/category/${slug}/home`, {
           params: { subcategory: subSlug }
         });
         if (Array.isArray(homeResponse.data)) {
@@ -63,7 +63,7 @@ export default function CategoryPage() {
         }
 
         // Fetch All Products
-        const response = await axios.get(`/api/products/category/${slug}`, {
+        const response = await api.get(`/api/products/category/${slug}`, {
           params: {
             subcategory: subSlug,
             min: priceRange[0],

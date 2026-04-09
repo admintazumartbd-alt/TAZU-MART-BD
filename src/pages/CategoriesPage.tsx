@@ -18,10 +18,11 @@ export default function CategoriesPage() {
             className="group relative h-[250px] rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all"
           >
             <img 
-              src={cat.banner} 
+              src={cat.banner || '/default-banner.png'} 
               alt={cat.name}
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
               referrerPolicy="no-referrer"
+              onError={(e) => (e.currentTarget.src = '/default-banner.png')}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8">
               <h2 className="text-2xl font-bold text-white mb-1">{cat.name}</h2>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { 
   TrendingUp, 
   ShoppingCart, 
@@ -44,23 +44,9 @@ import {
 } from 'recharts';
 import { cn, formatPrice } from '@/src/lib/utils';
 
-const data = [
-  { name: 'Mon', revenue: 4000, orders: 240 },
-  { name: 'Tue', revenue: 3000, orders: 198 },
-  { name: 'Wed', revenue: 2000, orders: 150 },
-  { name: 'Thu', revenue: 2780, orders: 190 },
-  { name: 'Fri', revenue: 1890, orders: 120 },
-  { name: 'Sat', revenue: 2390, orders: 170 },
-  { name: 'Sun', revenue: 3490, orders: 210 },
-];
+const data: any[] = [];
 
-const topProducts = [
-  { name: 'Premium Cotton T-Shirt', sales: 400, color: '#FF6A00', image: 'https://picsum.photos/seed/tshirt/100/100' },
-  { name: 'Slim Fit Denim Jeans', sales: 300, color: '#FF8C00', image: 'https://picsum.photos/seed/jeans/100/100' },
-  { name: 'Wireless Bluetooth Earbuds', sales: 200, color: '#FFA500', image: 'https://picsum.photos/seed/earbuds/100/100' },
-  { name: 'Leather Wallet', sales: 150, color: '#FFC107', image: 'https://picsum.photos/seed/wallet/100/100' },
-  { name: 'Designer Sunglasses', sales: 100, color: '#FFEB3B', image: 'https://picsum.photos/seed/sunglasses/100/100' },
-];
+const topProducts: any[] = [];
 
 interface StatCardProps {
   title: string;
@@ -131,19 +117,21 @@ export default function AdminDashboard() {
   const chartData = stats?.salesData ? Object.entries(stats.salesData).map(([name, revenue]) => ({ name, revenue })) : data;
 
   const orderStatusBreakdown = [
-    { label: 'Pending', count: 42, color: 'bg-orange-500' },
-    { label: 'Confirmed', count: 28, color: 'bg-blue-500' },
-    { label: 'Processing', count: 15, color: 'bg-indigo-500' },
-    { label: 'Shipped', count: 64, color: 'bg-violet-500' },
-    { label: 'Delivered', count: 892, color: 'bg-emerald-500' },
+    { label: 'Pending', count: stats?.pendingOrders || 0, color: 'bg-orange-500' },
+    { label: 'Confirmed', count: stats?.confirmedOrders || 0, color: 'bg-blue-500' },
+    { label: 'Processing', count: stats?.processingOrders || 0, color: 'bg-indigo-500' },
+    { label: 'Shipped', count: stats?.shippedOrders || 0, color: 'bg-violet-500' },
+    { label: 'Delivered', count: stats?.deliveredOrders || 0, color: 'bg-emerald-500' },
   ];
 
-  const recentOrders = [
+  const recentOrders = stats?.recentOrders || [
     { id: '#ORD-7234', customer: 'Rahat Khan', items: 3, total: '৳ 4,200', status: 'Pending', date: '2 mins ago', image: 'https://picsum.photos/seed/user1/100/100' },
     { id: '#ORD-7233', customer: 'Sumi Akter', items: 1, total: '৳ 1,500', status: 'Processing', date: '15 mins ago', image: 'https://picsum.photos/seed/user2/100/100' },
     { id: '#ORD-7232', customer: 'Jasim Uddin', items: 2, total: '৳ 2,800', status: 'Delivered', date: '1 hour ago', image: 'https://picsum.photos/seed/user3/100/100' },
     { id: '#ORD-7231', customer: 'Nila Islam', items: 4, total: '৳ 6,500', status: 'Cancelled', date: '3 hours ago', image: 'https://picsum.photos/seed/user4/100/100' },
   ];
+
+  const topProductsList = stats?.topProducts || topProducts;
 
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
@@ -411,7 +399,12 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img src={order.image} alt={order.customer} className="w-8 h-8 rounded-full object-cover" />
+                        <img 
+                          src={order.image || '/default-avatar.png'} 
+                          alt={order.customer} 
+                          className="w-8 h-8 rounded-full object-cover" 
+                          onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
+                        />
                         <span className="text-sm font-medium text-gray-700">{order.customer}</span>
                       </div>
                     </td>
@@ -472,10 +465,15 @@ export default function AdminDashboard() {
             <button className="text-xs font-bold text-[#FF6A00] hover:underline">View All</button>
           </div>
           <div className="flex lg:flex-col gap-6 overflow-x-auto lg:overflow-x-visible pb-4 lg:pb-0 no-scrollbar">
-            {topProducts.map((product, idx) => (
+            {topProductsList.length > 0 ? topProductsList.map((product: any, idx: number) => (
               <div key={idx} className="flex items-center justify-between group cursor-pointer min-w-[240px] lg:min-w-0 bg-gray-50 lg:bg-transparent p-3 lg:p-0 rounded-xl lg:rounded-none border border-gray-100 lg:border-none">
                 <div className="flex items-center gap-4">
-                  <img src={product.image} alt={product.name} className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-110 transition-transform duration-500" />
+                  <img 
+                    src={product.image || '/default-product.png'} 
+                    alt={product.name} 
+                    className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-110 transition-transform duration-500" 
+                    onError={(e) => (e.currentTarget.src = '/default-product.png')}
+                  />
                   <div>
                     <p className="text-sm font-bold text-gray-900 group-hover:text-[#FF6A00] transition-colors line-clamp-1">{product.name}</p>
                     <p className="text-xs text-gray-400 font-medium mt-1">{product.sales} Sold • ৳ {product.sales * 1200}</p>
@@ -483,7 +481,11 @@ export default function AdminDashboard() {
                 </div>
                 <ChevronRight size={16} className="text-gray-300 group-hover:text-[#FF6A00] group-hover:translate-x-1 transition-all hidden lg:block" />
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-10">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">No products sold yet</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

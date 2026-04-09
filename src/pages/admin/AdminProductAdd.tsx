@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../lib/api';
 import { 
   Package, Tag, Layers, Box, Image as ImageIcon, Plus, X, Save, ArrowLeft,
   ChevronRight, Info, DollarSign, Hash, Palette, Maximize, CloudUpload,
@@ -128,6 +128,9 @@ export default function AdminProductAdd() {
     videoLink: '',
     show_in_home: true,
     is_featured: false,
+    isNewArrival: false,
+    isBestSelling: false,
+    isOfferProduct: false,
     colors: [] as { name: string; hex: string; visible: boolean; extraPrice: number }[],
     specifications: [] as { title: string; description: string }[],
     deliveryCharges: {
@@ -195,6 +198,9 @@ export default function AdminProductAdd() {
               videoLink: p.videoLink || '',
               show_in_home: p.show_in_home ?? true,
               is_featured: p.is_featured ?? false,
+              isNewArrival: p.isNewArrival ?? false,
+              isBestSelling: p.isBestSelling ?? false,
+              isOfferProduct: p.isOfferProduct ?? false,
               colors: p.colors || [],
               specifications: p.specifications ? Object.entries(p.specifications).map(([title, description]) => ({ title, description })) : [],
               deliveryCharges: p.deliveryCharges || { dhaka: 70, others: 120 },
@@ -360,6 +366,9 @@ export default function AdminProductAdd() {
         image: images[thumbnailIndex] || images[0] || '',
         show_in_home: formData.show_in_home,
         is_featured: formData.is_featured,
+        isNewArrival: formData.isNewArrival,
+        isBestSelling: formData.isBestSelling,
+        isOfferProduct: formData.isOfferProduct,
         updatedAt: new Date().toISOString()
       };
 
@@ -655,6 +664,72 @@ export default function AdminProductAdd() {
                   </button>
                   <span className="ml-3 text-xs font-bold text-gray-500 uppercase">
                     {formData.is_featured ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-[16px] shadow-[0_4px_12px_rgba(0,0,0,0.05)] space-y-3">
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider ml-1">New Arrival</label>
+                <div className="flex items-center h-[44px]">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isNewArrival: !formData.isNewArrival })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      formData.isNewArrival ? "bg-emerald-600" : "bg-gray-200"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                      formData.isNewArrival ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                  <span className="ml-3 text-xs font-bold text-gray-500 uppercase">
+                    {formData.isNewArrival ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-[16px] shadow-[0_4px_12_rgba(0,0,0,0.05)] space-y-3">
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider ml-1">Best Selling</label>
+                <div className="flex items-center h-[44px]">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isBestSelling: !formData.isBestSelling })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      formData.isBestSelling ? "bg-amber-600" : "bg-gray-200"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                      formData.isBestSelling ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                  <span className="ml-3 text-xs font-bold text-gray-500 uppercase">
+                    {formData.isBestSelling ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-[16px] shadow-[0_4px_12px_rgba(0,0,0,0.05)] space-y-3">
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider ml-1">Offer Product</label>
+                <div className="flex items-center h-[44px]">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isOfferProduct: !formData.isOfferProduct })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      formData.isOfferProduct ? "bg-rose-600" : "bg-gray-200"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                      formData.isOfferProduct ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                  <span className="ml-3 text-xs font-bold text-gray-500 uppercase">
+                    {formData.isOfferProduct ? 'Yes' : 'No'}
                   </span>
                 </div>
               </div>

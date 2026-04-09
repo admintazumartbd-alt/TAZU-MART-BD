@@ -1,15 +1,36 @@
-import React, { useState } from 'react';
-import { MessageSquare, Plus, Search, User, Clock, MoreVertical, Edit2, Trash2, Save, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageSquare, Plus, Search, User, Clock, MoreVertical, Edit2, Trash2, Save, X, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminSupportNotes() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [notes, setNotes] = useState([
-    { id: 1, customer: 'Rahat Khan', note: 'Customer prefers fast delivery via Pathao. High priority.', admin: 'Admin', date: '2 hours ago' },
-    { id: 2, customer: 'Sumi Akter', note: 'High return rate on apparel items. Double check sizing before shipping.', admin: 'Admin', date: '5 hours ago' },
-    { id: 3, customer: 'Jasim Uddin', note: 'Requested call before delivery. Address is slightly hard to find.', admin: 'Admin', date: '1 day ago' },
-    { id: 4, customer: 'Nila Islam', note: 'Regular customer. Always pays via bKash. Loyal buyer.', admin: 'Admin', date: '2 days ago' },
-  ]);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/support-notes');
+        setNotes(response.data);
+      } catch (error) {
+        console.error('Failed to fetch support notes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

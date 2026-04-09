@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from '../../lib/api';
 import { 
   Plus, 
   Search, 
@@ -77,7 +78,12 @@ function SortableCategoryRow({ category, onEdit, onDelete, onToggleStatus }: Sor
       </div>
       
       <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 flex-shrink-0">
-        <img src={category.image} alt={category.name} className="w-full h-full object-cover" />
+        <img 
+          src={category.image || '/default-category.png'} 
+          alt={category.name} 
+          className="w-full h-full object-cover" 
+          onError={(e) => (e.currentTarget.src = '/default-category.png')}
+        />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -155,8 +161,8 @@ export default function AdminProductCategories() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/categories');
-      const data = await res.json();
+      const res = await axios.get('/api/categories');
+      const data = res.data;
       if (Array.isArray(data)) {
         setCategories(data);
       } else {
@@ -184,11 +190,7 @@ export default function AdminProductCategories() {
       // Update order in backend
       try {
         const orders = newCategories.map((cat: Category, index: number) => ({ id: cat.id, order: index }));
-        await fetch('/api/admin/categories/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orders })
-        });
+        await axios.post('/api/admin/categories/reorder', { orders });
       } catch (error) {
         console.error("Failed to update reorder:", error);
       }
@@ -198,15 +200,11 @@ export default function AdminProductCategories() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          order: editingCategory ? editingCategory.order : categories.length
-        })
+      const res = await axios.post('/api/admin/categories', {
+        ...formData,
+        order: editingCategory ? editingCategory.order : categories.length
       });
-      if (res.ok) {
+      if (res.data.success || res.status === 200) {
         setIsModalOpen(false);
         setEditingCategory(null);
         setFormData({ name: '', slug: '', image: '', banner: '', status: 'ACTIVE', subcategories: [] });
@@ -220,8 +218,8 @@ export default function AdminProductCategories() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
     try {
-      const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
-      if (res.ok) {
+      const res = await axios.delete(`/api/admin/categories/${id}`);
+      if (res.data.success || res.status === 200) {
         fetchCategories();
       }
     } catch (error) {
@@ -232,11 +230,7 @@ export default function AdminProductCategories() {
   const handleToggleStatus = async (cat: Category) => {
     const newStatus = cat.status === 'ACTIVE' ? 'HIDDEN' : 'ACTIVE';
     try {
-      await fetch('/api/admin/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cat, status: newStatus })
-      });
+      await axios.post('/api/admin/categories', { ...cat, status: newStatus });
       fetchCategories();
     } catch (error) {
       console.error("Failed to toggle status:", error);

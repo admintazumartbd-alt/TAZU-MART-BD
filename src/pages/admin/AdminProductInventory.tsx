@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -29,16 +29,28 @@ import {
   XCircle
 } from 'lucide-react';
 import { cn, formatPrice } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminProductInventory() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [inventory, setInventory] = useState([
-    { id: 1, name: 'Premium Cotton T-Shirt', sku: 'TSH-001', stock: 5, minStock: 10, category: 'Apparel', image: 'https://picsum.photos/seed/tshirt/100/100', status: 'Low Stock', price: 1250 },
-    { id: 2, name: 'Slim Fit Denim Jeans', sku: 'JNS-002', stock: 3, minStock: 5, category: 'Apparel', image: 'https://picsum.photos/seed/jeans/100/100', status: 'Low Stock', price: 2450 },
-    { id: 3, name: 'Wireless Bluetooth Earbuds', sku: 'EBD-003', stock: 0, minStock: 15, category: 'Electronics', image: 'https://picsum.photos/seed/earbuds/100/100', status: 'Out of Stock', price: 3500 },
-    { id: 4, name: 'Leather Wallet', sku: 'WLT-004', stock: 45, minStock: 10, category: 'Accessories', image: 'https://picsum.photos/seed/wallet/100/100', status: 'In Stock', price: 850 },
-    { id: 5, name: 'Casual Polo Shirt', sku: 'POL-005', stock: 12, minStock: 10, category: 'Apparel', image: 'https://picsum.photos/seed/polo/100/100', status: 'In Stock', price: 1100 },
-  ]);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/inventory');
+        setInventory(response.data);
+      } catch (error) {
+        console.error('Failed to fetch inventory:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, []);
 
   const getStatusColor = (s: string) => {
     switch (s.toLowerCase()) {
@@ -53,6 +65,14 @@ export default function AdminProductInventory() {
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
@@ -185,7 +205,12 @@ export default function AdminProductInventory() {
                   <td className="px-10 py-8">
                     <div className="flex items-center gap-5">
                       <div className="w-16 h-16 rounded-[20px] overflow-hidden border border-gray-100 shrink-0 shadow-sm group-hover:shadow-md transition-all">
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                        <img 
+                          src={item.image || item.images?.[0] || '/default-product.png'} 
+                          alt={item.name} 
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+                          onError={(e) => (e.currentTarget.src = '/default-product.png')}
+                        />
                       </div>
                       <div>
                         <p className="text-xs font-black text-gray-900 group-hover:text-[#FF6A00] transition-colors leading-tight uppercase tracking-tight">{item.name}</p>

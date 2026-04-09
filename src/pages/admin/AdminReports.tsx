@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Download, 
@@ -19,17 +19,39 @@ import {
   Sparkles,
   FileSpreadsheet,
   FileJson,
-  FileCode
+  FileCode,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import axios from '../../lib/api';
 
 export default function AdminReports() {
-  const reports = [
-    { id: 'REP-1024', name: 'Monthly Sales Report - March 2026', type: 'Sales', format: 'PDF', status: 'Ready', date: '2 hours ago' },
-    { id: 'REP-1025', name: 'Inventory Audit Log', type: 'Inventory', format: 'Excel', status: 'Ready', date: '5 hours ago' },
-    { id: 'REP-1026', name: 'Customer Behavior Analysis', type: 'Analytics', format: 'PDF', status: 'Processing', date: '12 hours ago' },
-    { id: 'REP-1027', name: 'Tax Compliance Statement', type: 'Finance', format: 'PDF', status: 'Ready', date: '1 day ago' },
-  ];
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/admin/reports');
+        setReports(response.data);
+      } catch (error) {
+        console.error('Failed to fetch reports:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReports();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="w-8 h-8 text-[#FF6A00] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">

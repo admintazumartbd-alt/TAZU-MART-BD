@@ -9,6 +9,8 @@ import CheckoutPage from './pages/CheckoutPage';
 import WishlistPage from './pages/WishlistPage';
 import SearchPage from './pages/SearchPage';
 import CategoriesPage from './pages/CategoriesPage';
+import DynamicPage from './pages/DynamicPage';
+import FilteredProductPage from './pages/FilteredProductPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import AuthPage from './pages/AuthPage';
@@ -16,7 +18,6 @@ import AccountPage from './pages/AccountPage';
 import SupportPage from './pages/SupportPage';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import WhatsAppButton from './components/WhatsAppButton';
 
 // Admin Pages
 import AdminLayout from './components/admin/AdminLayout';
@@ -24,6 +25,10 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCustomerList from './pages/admin/AdminCustomerList';
 import AdminOrderList from './pages/admin/AdminOrderList';
 import AdminProductList from './pages/admin/AdminProductList';
+import AdminMenuManagement from './pages/admin/AdminMenuManagement';
+import AdminPageManagement from './pages/admin/AdminPageManagement';
+import AdminOfferManagement from './pages/admin/AdminOfferManagement';
+import AdminContactSettings from './pages/admin/AdminContactSettings';
 import AdminFooterSettings from './pages/AdminFooterSettings';
 import AdminCustomerMonitoring from './pages/AdminCustomerMonitoring';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -67,7 +72,9 @@ const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.Re
     </div>
   );
   
-  if (!user) return <Navigate to="/auth" />;
+  if (!user) {
+    return <Navigate to={requireAdmin ? "/admin-login" : "/auth"} />;
+  }
   
   if (requireAdmin && user.role !== 'ADMIN') {
     console.warn('Unauthorized admin access attempt by:', user.email);
@@ -83,25 +90,34 @@ export default function App() {
       <Routes>
         {/* Public & Customer Routes */}
         <Route path="/" element={<Layout />}>
-          <Route index element={<><Home /><WhatsAppButton /></>} />
-          <Route path="shop" element={<><CategoriesPage /><WhatsAppButton /></>} />
-          <Route path="categories" element={<><CategoriesPage /><WhatsAppButton /></>} />
-          <Route path="category/:slug" element={<><CategoryPage /><WhatsAppButton /></>} />
-          <Route path="category/:slug/:subSlug" element={<><CategoryPage /><WhatsAppButton /></>} />
-          <Route path="product/:id" element={<><ProductDetails /><WhatsAppButton /></>} />
-          <Route path="cart" element={<><CartPage /><WhatsAppButton /></>} />
+          <Route index element={<Home />} />
+          <Route path="shop" element={<CategoriesPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="category/:slug" element={<CategoryPage />} />
+          <Route path="category/:slug/:subSlug" element={<CategoryPage />} />
+          <Route path="product/:id" element={<ProductDetails />} />
+          <Route path="cart" element={<CartPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
-          <Route path="wishlist" element={<><WishlistPage /><WhatsAppButton /></>} />
+          <Route path="wishlist" element={<WishlistPage />} />
           <Route path="auth" element={<AuthPage />} />
           <Route path="admin-login" element={<AdminLoginPage />} />
-          <Route path="account" element={<ProtectedRoute><AccountPage /><WhatsAppButton /></ProtectedRoute>} />
-          <Route path="search" element={<><SearchPage /><WhatsAppButton /></>} />
-          <Route path="about" element={<><AboutPage /><WhatsAppButton /></>} />
-          <Route path="contact" element={<><ContactPage /><WhatsAppButton /></>} />
-          <Route path="support" element={<><SupportPage /><WhatsAppButton /></>} />
-          <Route path="terms-of-service" element={<><TermsOfService /><WhatsAppButton /></>} />
-          <Route path="privacy-policy" element={<><PrivacyPolicy /><WhatsAppButton /></>} />
+          <Route path="account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
+          <Route path="search" element={<SearchPage />} />
+          
+          {/* Dynamic & Filtered Routes */}
+          <Route path="new-arrivals" element={<FilteredProductPage title="New Arrivals" filterType="isNewArrival" />} />
+          <Route path="best-selling" element={<FilteredProductPage title="Best Selling" filterType="isBestSelling" />} />
+          <Route path="offers" element={<FilteredProductPage title="Offers" filterType="isOfferProduct" />} />
+          
+          <Route path="about" element={<AboutPage />} />
+          <Route path="contact" element={<ContactPage />} />
+          <Route path="support" element={<SupportPage />} />
+          <Route path="terms-of-service" element={<TermsOfService />} />
+          <Route path="privacy-policy" element={<PrivacyPolicy />} />
           <Route path="track-order" element={<div className="p-12 text-center">Order Tracking Coming Soon</div>} />
+          
+          {/* Dynamic Page Route (MUST BE LAST) */}
+          <Route path=":slug" element={<DynamicPage />} />
         </Route>
 
         {/* Admin Routes */}
@@ -112,6 +128,12 @@ export default function App() {
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="profile" element={<AdminProfile />} />
+                
+                {/* Content Management */}
+                <Route path="menus" element={<AdminMenuManagement />} />
+                <Route path="pages" element={<AdminPageManagement />} />
+                <Route path="offers" element={<AdminOfferManagement />} />
+                <Route path="contact-settings" element={<AdminContactSettings />} />
                 
                 {/* Orders */}
                 <Route path="orders" element={<AdminOrderList />} />

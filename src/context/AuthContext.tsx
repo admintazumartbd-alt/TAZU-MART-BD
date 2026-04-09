@@ -1,22 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  onAuthStateChanged, 
-  signOut, 
-  User as FirebaseUser,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-  signInWithPopup
-} from 'firebase/auth';
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  collection,
-  addDoc
-} from 'firebase/firestore';
-import { auth, db, googleProvider, facebookProvider, handleFirestoreError, OperationType } from '../firebase';
+import { supabase } from '../lib/supabase';
 
 export type UserRole = 'ADMIN' | 'CUSTOMER';
 export type LoginMethod = 'MANUAL' | 'GOOGLE' | 'FACEBOOK';
@@ -26,6 +9,7 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
+  address?: string;
   image?: string;
   role: UserRole;
   loginMethod: LoginMethod;
@@ -40,8 +24,10 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
-  register: (data: { email: string; password?: string; name: string; phone?: string }) => Promise<void>;
+  register: (data: { email: string; password?: string; name: string; phone?: string; address?: string }) => Promise<void>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  sendMagicLink: (email: string) => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
 }
@@ -53,51 +39,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            setUser(userDoc.data() as User);
-          } else {
-            const isAdminEmail = firebaseUser.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
-            const userData: User = {
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || (isAdminEmail ? 'Tazu Mart Admin' : firebaseUser.email?.split('@')[0] || 'User'),
-              email: firebaseUser.email || '',
-              image: firebaseUser.photoURL || undefined,
-              role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
-              loginMethod: 'MANUAL',
-              createdAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).toISOString() : new Date().toISOString(),
-              lastLogin: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).toISOString() : new Date().toISOString(),
-              status: 'ACTIVE'
-            };
-            setUser(userData);
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
-        }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchUserData(session.user.id);
       } else {
-        setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await fetchUserData(session.user.id);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const saveUserToFirestore = async (userData: User) => {
+  const fetchUserData = async (userId: string) => {
     try {
-      await setDoc(doc(db, 'users', userData.id), userData);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${userData.id}`);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // Not found
+          // Handle new user creation if needed, but usually Supabase Auth 
+          // should be synced with a users table via triggers or manual insert
+          setUser(null);
+        } else {
+          console.error('Error fetching user data:', error);
+        }
+      } else {
+        setUser(data as User);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching user:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveUserToSupabase = async (userData: User) => {
+    const { error } = await supabase
+      .from('users')
+      .upsert(userData);
+    
+    if (error) {
+      console.error('Error saving user:', error);
+      throw error;
     }
   };
 
   const logActivity = async (userData: User, type: 'LOGIN' | 'REGISTRATION', method: LoginMethod) => {
     try {
-      await addDoc(collection(db, 'activities'), {
-        id: Date.now(),
+      await supabase.from('activities').insert({
         userId: userData.id,
         userName: userData.name,
         type,
@@ -106,35 +109,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         device: window.innerWidth < 768 ? 'Mobile' : 'Desktop'
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'activities');
+      console.error('Error logging activity:', error);
     }
   };
 
-  const login = async (email: string, password?: string) => {
+  const login = async (emailInput: string, password?: string) => {
     if (!password) throw new Error('Password is required for manual login');
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    const isAdminEmail = result.user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
     
-    const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+    const email = emailInput.trim();
+    let { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+    const isAdminEmail = adminEmails.includes(email.toLowerCase());
+
+    // Improved Admin Login Logic
+    if (error && isAdminEmail) {
+      // If it's a rate limit error, pass it through with a helpful message
+      if (error.message.includes('rate limit')) {
+        throw new Error('Too many attempts. Please wait a few minutes before trying again.');
+      }
+
+      // If credentials are invalid, it might be the first time (account doesn't exist)
+      // or the password is truly wrong.
+      if (error.message.includes('Invalid login credentials') || error.status === 400) {
+        try {
+          // Try to bootstrap the admin account
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                full_name: 'Tazu Mart Admin',
+              }
+            }
+          });
+
+          if (signUpError) {
+            // If user already exists, then the password was definitely wrong
+            if (signUpError.message.toLowerCase().includes('already registered')) {
+              throw new Error('The admin account exists but the password entered is incorrect. Please use the correct password or use the Magic Link.');
+            }
+            // If it's a rate limit during signup
+            if (signUpError.message.toLowerCase().includes('rate limit')) {
+              throw new Error('Too many attempts. Please wait a few minutes or use the Magic Link to log in.');
+            }
+            throw signUpError;
+          }
+
+          if (signUpData.user) {
+            if (signUpData.session) {
+              data = { user: signUpData.user, session: signUpData.session };
+              error = null;
+            } else {
+              // Signup succeeded but session is null (likely email confirmation required)
+              throw new Error('Admin account created! However, Supabase requires email confirmation by default. Please check your inbox OR disable "Confirm email" in Supabase Dashboard (Authentication > Providers > Email) to log in instantly.');
+            }
+          }
+        } catch (bootstrapErr: any) {
+          console.error('Admin bootstrap failed:', bootstrapErr);
+          throw bootstrapErr;
+        }
+      }
+    }
+
+    if (error) throw error;
+    if (!data.user) throw new Error('Login failed');
+    
+    // Fetch or create user record
+    const { data: userRecord, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
     let userData: User;
     
-    if (userDoc.exists()) {
-      userData = userDoc.data() as User;
+    if (userRecord) {
+      userData = userRecord as User;
+      // Ensure role is ADMIN if it's the admin email, even if it was changed in DB
+      if (isAdminEmail && userData.role !== 'ADMIN') {
+        userData.role = 'ADMIN';
+        await supabase.from('users').update({ role: 'ADMIN' }).eq('id', data.user.id);
+      }
       userData.lastLogin = new Date().toISOString();
-      await updateDoc(doc(db, 'users', result.user.uid), { lastLogin: userData.lastLogin });
+      await supabase.from('users').update({ lastLogin: userData.lastLogin }).eq('id', data.user.id);
     } else {
       userData = {
-        id: result.user.uid,
-        name: result.user.displayName || (isAdminEmail ? 'Tazu Mart Admin' : result.user.email?.split('@')[0] || 'User'),
-        email: result.user.email || '',
-        image: result.user.photoURL || undefined,
+        id: data.user.id,
+        name: isAdminEmail ? 'Tazu Mart Admin' : data.user.email?.split('@')[0] || 'User',
+        email: data.user.email || '',
         role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
         loginMethod: 'MANUAL',
-        createdAt: result.user.metadata.creationTime ? new Date(result.user.metadata.creationTime).toISOString() : new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString(),
         status: 'ACTIVE'
       };
-      await saveUserToFirestore(userData);
+      await saveUserToSupabase(userData);
     }
     
     setUser(userData);
@@ -142,90 +215,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    const isAdminEmail = result.user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
-    
-    const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-    let userData: User;
-    
-    if (userDoc.exists()) {
-      userData = userDoc.data() as User;
-      userData.lastLogin = new Date().toISOString();
-      await updateDoc(doc(db, 'users', result.user.uid), { lastLogin: userData.lastLogin });
-    } else {
-      userData = {
-        id: result.user.uid,
-        name: result.user.displayName || (isAdminEmail ? 'Tazu Mart Admin' : result.user.email?.split('@')[0] || 'User'),
-        email: result.user.email || '',
-        image: result.user.photoURL || undefined,
-        role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
-        loginMethod: 'GOOGLE',
-        createdAt: result.user.metadata.creationTime ? new Date(result.user.metadata.creationTime).toISOString() : new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        status: 'ACTIVE'
-      };
-      await saveUserToFirestore(userData);
-    }
-    
-    setUser(userData);
-    logActivity(userData, 'LOGIN', 'GOOGLE');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) throw error;
   };
 
   const loginWithFacebook = async () => {
-    const result = await signInWithPopup(auth, facebookProvider);
-    const isAdminEmail = result.user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
-    
-    const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-    let userData: User;
-    
-    if (userDoc.exists()) {
-      userData = userDoc.data() as User;
-      userData.lastLogin = new Date().toISOString();
-      await updateDoc(doc(db, 'users', result.user.uid), { lastLogin: userData.lastLogin });
-    } else {
-      userData = {
-        id: result.user.uid,
-        name: result.user.displayName || (isAdminEmail ? 'Tazu Mart Admin' : result.user.email?.split('@')[0] || 'User'),
-        email: result.user.email || '',
-        image: result.user.photoURL || undefined,
-        role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
-        loginMethod: 'FACEBOOK',
-        createdAt: result.user.metadata.creationTime ? new Date(result.user.metadata.creationTime).toISOString() : new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        status: 'ACTIVE'
-      };
-      await saveUserToFirestore(userData);
-    }
-    
-    setUser(userData);
-    logActivity(userData, 'LOGIN', 'FACEBOOK');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) throw error;
   };
 
-  const register = async (data: { email: string; password?: string; name: string; phone?: string }) => {
+  const register = async (data: { email: string; password?: string; name: string; phone?: string; address?: string }) => {
     if (!data.password) throw new Error('Password is required for registration');
-    const result = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    await updateProfile(result.user, { displayName: data.name });
     
-    const isAdminEmail = result.user.email?.toLowerCase() === 'admin.tazumartbd@gmail.com';
+    const email = data.email.trim();
+    const { data: authData, error } = await supabase.auth.signUp({
+      email,
+      password: data.password,
+      options: {
+        data: {
+          full_name: data.name,
+        }
+      }
+    });
+
+    if (error) throw error;
+    if (!authData.user) throw new Error('Registration failed');
+    
+    const adminEmails = ['admin.tazumart060@gmail.com', 'admin.tazumartbd@gmail.com'];
+    const isAdminEmail = adminEmails.includes(authData.user.email?.toLowerCase() || '');
     const userData: User = {
-      id: result.user.uid,
+      id: authData.user.id,
       name: data.name,
-      email: result.user.email || '',
+      email: authData.user.email || '',
       phone: data.phone,
+      address: data.address,
       role: isAdminEmail ? 'ADMIN' : 'CUSTOMER',
       loginMethod: 'MANUAL',
-      createdAt: result.user.metadata.creationTime ? new Date(result.user.metadata.creationTime).toISOString() : new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString(),
       status: 'ACTIVE'
     };
     
-    await saveUserToFirestore(userData);
+    await saveUserToSupabase(userData);
     setUser(userData);
     logActivity(userData, 'REGISTRATION', 'MANUAL');
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?type=recovery`,
+    });
+    if (error) throw error;
+  };
+
+  const sendMagicLink = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
   };
 
   return (
@@ -236,7 +301,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loginWithGoogle,
       loginWithFacebook,
       register, 
-      logout, 
+      logout,
+      resetPassword,
+      sendMagicLink,
       isAuthenticated: !!user,
       isAdmin: user?.role === 'ADMIN'
     }}>
